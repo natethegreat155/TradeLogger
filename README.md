@@ -17,9 +17,9 @@ A free, single-file HTML trade journal for day traders. No server, no account, n
 
 ## Getting Started
 
-1. Download `TradeLog.html`
+1. Download `TradeLog.html` - just save it wherever you'll remember it lives.
 2. Open it in Chrome or Edge (recommended for full save functionality)
-3. Go to the **Import** tab and drag in your broker CSV
+3. Go to the **Import** tab (you should see this first as a default) and drag in your broker CSV. Currently configured only for Thinkorswim and IBKR.
 4. Your trades appear in the **Trade Log** tab immediately
 5. Hit **Save Journal** to export a `.json` backup
 
@@ -132,7 +132,7 @@ Each trade has a notes field (visible when expanded). Use it for post-trade anal
 
 ## Saving & Loading
 
-**Save Journal** — exports all trades and notes to a `.json` file.
+**Save Journal** — exports all trades and notes to a `.json` file. Save this file ideally in the same place where you downloaded the HTML file.
 
 - In **Chrome/Edge**: uses the File System Access API so **Quick Save** overwrites the same file after the first save
 - In **Safari/Firefox**: saves to your Downloads folder each time
