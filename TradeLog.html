@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradeLog – Day Trading Journal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #21262d;
+  --bg4: #2d333b;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text2: #8b949e;
+  --green: #3fb950;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --yellow: #e3b341;
+  --purple: #bc8cff;
+  --radius: 6px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; min-height: 100vh; }
+
+/* ── NAV ── */
+nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; height: 52px; gap: 24px; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 16px; font-weight: 700; color: var(--blue); letter-spacing: -0.5px; white-space: nowrap; }
+.nav-logo span { color: var(--text2); font-weight: 400; font-size: 12px; margin-left: 6px; }
+.nav-tabs { display: flex; gap: 2px; }
+.nav-tab { background: none; border: none; color: var(--text2); cursor: pointer; padding: 6px 14px; border-radius: var(--radius); font-size: 13px; transition: all .15s; }
+.nav-tab:hover { background: var(--bg3); color: var(--text); }
+.nav-tab.active { background: var(--bg3); color: var(--blue); font-weight: 500; }
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.trade-count { background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--text2); }
+.clear-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text2); cursor: pointer; padding: 4px 10px; font-size: 11px; transition: all .15s; }
+.clear-btn:hover { border-color: var(--red); color: var(--red); }
+.save-indicator { font-size: 11px; display: flex; align-items: center; gap: 5px; }
+.save-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.save-dot.unsaved { background: var(--yellow); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+
+/* ── LAYOUT ── */
+.tab-content { display: none; padding: 20px; max-width: 1400px; margin: 0 auto; }
+.tab-content.active { display: block; }
+
+/* ── CARDS ── */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.card-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+/* ── IMPORT TAB ── */
+.import-grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
+.drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 48px 24px; text-align: center; cursor: pointer; transition: all .2s; background: var(--bg2); }
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--blue); background: rgba(88,166,255,.05); }
+.drop-zone-icon { font-size: 36px; margin-bottom: 12px; }
+.drop-zone h3 { font-size: 15px; margin-bottom: 6px; }
+.drop-zone p { color: var(--text2); font-size: 12px; line-height: 1.6; }
+.drop-zone input[type=file] { display: none; }
+.btn { display: inline-flex; align-items: center; gap: 6px; background: var(--blue); color: #0d1117; border: none; border-radius: var(--radius); padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s; margin-top: 14px; }
+.btn:hover { opacity: .85; }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); font-weight: 500; }
+.broker-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-top: 10px; }
+.broker-badge.tos { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+.broker-badge.ibkr { background: rgba(88,166,255,.15); color: var(--blue); border: 1px solid rgba(88,166,255,.3); }
+.broker-badge.unknown { background: rgba(227,179,65,.15); color: var(--yellow); border: 1px solid rgba(227,179,65,.3); }
+.import-log { max-height: 220px; overflow-y: auto; font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; }
+.import-log-entry { padding: 4px 0; border-bottom: 1px solid var(--border); color: var(--text2); }
+.import-log-entry.ok { color: var(--green); }
+.import-log-entry.warn { color: var(--yellow); }
+.import-log-entry.err { color: var(--red); }
+.format-guide { margin-top: 0; }
+.format-guide h4 { font-size: 12px; color: var(--text2); margin-bottom: 8px; font-weight: 500; }
+.format-step { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.format-step:last-child { border-bottom: none; }
+.step-num { background: var(--bg3); color: var(--blue); border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+.step-text { color: var(--text2); line-height: 1.5; }
+.step-text strong { color: var(--text); }
+
+/* ── TRADE LOG TAB ── */
+.filters-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.filter-input { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 6px 10px; font-size: 12px; outline: none; }
+.filter-input:focus { border-color: var(--blue); }
+select.filter-input option { background: var(--bg3); }
+.filter-label { color: var(--text2); font-size: 11px; }
+.trades-table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th { background: var(--bg3); color: var(--text2); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+thead th.num { text-align: right; }
+.trade-row { border-bottom: 1px solid var(--border); }
+.trade-row:hover td { background: rgba(255,255,255,.02); }
+.trade-row td { padding: 9px 10px; vertical-align: middle; }
+.trade-row td.num { text-align: right; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+.trade-expand-btn { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 3px; }
+.trade-expand-btn:hover { background: var(--bg3); color: var(--text); }
+.fills-row td { background: var(--bg3) !important; padding: 0 !important; }
+.fills-inner { padding: 8px 10px 8px 40px; }
+.fill-row { display: flex; gap: 20px; padding: 4px 0; font-size: 12px; color: var(--text2); border-bottom: 1px solid var(--border); }
+.fill-row:last-of-type { border-bottom: none; }
+.fill-label { color: var(--text2); font-size: 11px; margin-right: 4px; }
+.fill-val { color: var(--text); font-family: 'SF Mono', monospace; }
+.side-buy { color: var(--green); font-weight: 600; }
+.side-sell { color: var(--red); font-weight: 600; }
+.pnl-pos { color: var(--green); font-weight: 600; }
+.pnl-neg { color: var(--red); font-weight: 600; }
+.pnl-zero { color: var(--text2); }
+.ticker-badge { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; font-family: monospace; }
+.option-detail { font-size: 11px; color: var(--text2); }
+.dte-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+.dte-0 { background: rgba(248,81,73,.2); color: var(--red); }
+.dte-14 { background: rgba(227,179,65,.2); color: var(--yellow); }
+.dte-30 { background: rgba(88,166,255,.2); color: var(--blue); }
+/* ── SCALING VISUALIZATION ── */
+.scale-viz { padding: 8px 0 4px 0; }
+.scale-viz-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.scale-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.scale-table th { font-size: 10px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.scale-table td { padding: 5px 8px 5px 0; border-bottom: 1px solid rgba(48,54,61,.5); vertical-align: middle; }
+.scale-table tr:last-child td { border-bottom: none; }
+.pos-bar-wrap { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+.pos-bar-track { flex: 1; height: 8px; background: var(--bg4); border-radius: 4px; overflow: hidden; position: relative; min-width: 80px; }
+.pos-bar-fill { height: 100%; border-radius: 4px; transition: width .25s; }
+.pos-bar-fill.long { background: rgba(63,185,80,.6); }
+.pos-bar-fill.short { background: rgba(248,81,73,.45); }
+.pos-bar-fill.zero { width: 0 !important; }
+.pos-label { font-size: 11px; color: var(--text2); white-space: nowrap; min-width: 36px; font-family: monospace; }
+.leg-pnl-pos { color: var(--green); font-weight: 600; font-size: 12px; font-family: monospace; white-space: nowrap; }
+.leg-pnl-neg { color: var(--red); font-weight: 600; font-size: 12px; font-family: monospace; white-space: nowrap; }
+.scale-summary { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); display: flex; gap: 20px; font-size: 11px; }
+.scale-summary-item { color: var(--text2); }
+.scale-summary-item strong { color: var(--text); }
+.notes-wrap { margin-top: 8px; }
+.notes-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 6px 10px; font-size: 12px; resize: vertical; min-height: 50px; outline: none; font-family: inherit; }
+.notes-input:focus { border-color: var(--blue); }
+.notes-input::placeholder { color: var(--text2); }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+.empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ── DASHBOARD TAB ── */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+.stat-value { font-size: 22px; font-weight: 700; font-family: 'SF Mono', monospace; letter-spacing: -1px; }
+.stat-sub { font-size: 11px; color: var(--text2); margin-top: 3px; }
+.stat-card.highlight { border-color: rgba(88,166,255,.4); }
+.charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+.charts-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 200px; }
+.chart-wrap-sm { position: relative; height: 180px; }
+
+/* ── CALENDAR TAB ── */
+.cal-nav { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.cal-nav-btn { background: var(--bg2); border: 1px solid var(--border); color: var(--text); cursor: pointer; padding: 6px 12px; border-radius: var(--radius); font-size: 13px; transition: background .15s; }
+.cal-nav-btn:hover { background: var(--bg3); }
+.cal-month-label { font-size: 18px; font-weight: 700; }
+.cal-summary { font-size: 13px; color: var(--text2); margin-left: auto; }
+.cal-grid-wrap { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-header-cell { text-align: center; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; padding: 6px 0; }
+.cal-cell { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); min-height: 80px; padding: 8px; cursor: pointer; transition: all .15s; position: relative; }
+.cal-cell:hover { border-color: var(--blue); z-index: 1; }
+.cal-cell.empty { background: transparent; border-color: transparent; cursor: default; }
+.cal-cell.today { border-color: var(--blue) !important; }
+.cal-cell.selected { border-color: var(--yellow) !important; }
+.cal-cell.profit { background: rgba(63,185,80,.1); border-color: rgba(63,185,80,.3); }
+.cal-cell.profit:hover { border-color: var(--green); }
+.cal-cell.loss { background: rgba(248,81,73,.1); border-color: rgba(248,81,73,.3); }
+.cal-cell.loss:hover { border-color: var(--red); }
+.cal-cell.breakeven { background: rgba(139,148,158,.1); border-color: rgba(139,148,158,.2); }
+.cal-day-num { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+.cal-day-pnl { font-size: 13px; font-weight: 700; font-family: monospace; }
+.cal-day-trades { font-size: 10px; color: var(--text2); margin-top: 2px; }
+.cal-day-detail { }
+.cal-detail-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.cal-detail-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.cal-detail-trade { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.cal-detail-trade:last-child { border-bottom: none; }
+.cal-month-stats { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.cal-stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+.cal-stat-key { color: var(--text2); }
+
+/* ── MISC ── */
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+.tag-call { background: rgba(63,185,80,.15); color: var(--green); }
+.tag-put { background: rgba(248,81,73,.15); color: var(--red); }
+.tag-stock { background: rgba(88,166,255,.15); color: var(--blue); }
+.tag-open { background: rgba(227,179,65,.15); color: var(--yellow); }
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.text-right { text-align: right; }
+.text-muted { color: var(--text2); }
+.mt8 { margin-top: 8px; }
+.mt12 { margin-top: 12px; }
+.mt16 { margin-top: 16px; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.gap8 { gap: 8px; }
+.gap4 { gap: 4px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text2); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">⚡ TradeLog <span>Day Trading Journal</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showTab('import')">Import</button>
+    <button class="nav-tab" onclick="showTab('log')">Trade Log</button>
+    <button class="nav-tab" onclick="showTab('dashboard')">Dashboard</button>
+    <button class="nav-tab" onclick="showTab('calendar')">Calendar</button>
+  </div>
+  <div class="nav-right">
+    <span class="trade-count" id="nav-trade-count">0 trades</span>
+    <span class="save-indicator" id="save-indicator" title="Journal save status">
+      <span class="save-dot" id="save-dot"></span>
+      <span id="save-label" style="color:var(--text2)">—</span>
+    </span>
+    <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="exportJournal(false)" id="nav-save-btn">💾 Save Journal</button>
+    <button class="clear-btn" onclick="confirmClear()">Clear All</button>
+  </div>
+</nav>
+
+<!-- IMPORT TAB -->
+<div class="tab-content active" id="tab-import">
+  <div class="import-grid">
+    <div>
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+           ondragover="handleDragOver(event)" ondrop="handleDrop(event)" ondragleave="handleDragLeave(event)">
+        <input type="file" id="file-input" accept=".csv,.txt" multiple onchange="handleFileSelect(event)">
+        <div class="drop-zone-icon">📂</div>
+        <h3>Drop CSV file here</h3>
+        <p>Supports <strong style="color:var(--green)">Thinkorswim</strong> and <strong style="color:var(--blue)">Interactive Brokers</strong> exports<br>
+        You can drop multiple files at once</p>
+        <button class="btn mt12" onclick="event.stopPropagation(); document.getElementById('file-input').click()">Choose File</button>
+      </div>
+
+      <div class="card mt16" id="import-status" style="display:none">
+        <div class="card-title">Last Import</div>
+        <div id="import-broker-badge"></div>
+        <div class="import-log mt12" id="import-log"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card format-guide">
+        <div class="card-title">Thinkorswim Export</div>
+        <div class="format-step"><div class="step-num">1</div><div class="step-text">Open TOS → <strong>Monitor</strong> tab → <strong>Account Statement</strong></div></div>
+        <div class="format-step"><div class="step-num">2</div><div class="step-text">Set date range, click the <strong>gear ⚙️</strong> icon → ensure columns include Exec Time, Side, Qty, Symbol, Price, Commission, Net Amount</div></div>
+        <div class="format-step"><div class="step-num">3</div><div class="step-text">Right-click table → <strong>Export to file…</strong> → save as CSV</div></div>
+      </div>
+
+      <div class="card format-guide">
+        <div class="card-title">Interactive Brokers Export</div>
+        <div class="format-step"><div class="step-num">1</div><div class="step-text">TWS or Client Portal → <strong>Reports</strong> → <strong>Flex Queries</strong></div></div>
+        <div class="format-step"><div class="step-num">2</div><div class="step-text">Create query with <strong>Trades</strong> section, include: DateTime, Symbol, Buy/Sell, Quantity, T. Price, Comm/Fee, Proceeds</div></div>
+        <div class="format-step"><div class="step-num">3</div><div class="step-text">Or use <strong>Activity Statement</strong> → download as <strong>CSV</strong></div></div>
+      </div>
+
+      <div class="card" style="border-color:rgba(88,166,255,.3)">
+        <div class="card-title" style="color:var(--blue)">📦 Journal Backup</div>
+        <p class="text-muted" style="font-size:12px;margin-bottom:10px;line-height:1.6">
+          Save your full trade history to a <strong style="color:var(--text)">.json</strong> file anywhere on your computer. Load it to resume — new CSVs append automatically.
+          <span id="fs-api-note" style="display:none;color:var(--green)"> ✓ Native save dialog supported.</span>
+          <span id="fs-api-warn" style="display:none;color:var(--yellow)"> ⚠ Safari/Firefox: file saves to Downloads. Use Chrome or Edge for full folder control.</span>
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn" onclick="exportJournal(true)" style="font-size:12px;padding:7px 12px">💾 Save As…</button>
+          <button class="btn btn-secondary" id="quick-save-btn" onclick="exportJournal(false)" style="font-size:12px;padding:7px 12px;display:none" title="Quick Save">⚡ Quick Save</button>
+          <button class="btn btn-secondary" onclick="openJournalPicker()" style="font-size:12px;padding:7px 12px">📂 Load Journal</button>
+          <input type="file" id="journal-file-input" accept=".json" style="display:none" onchange="importJournal(event)">
+        </div>
+        <div id="journal-status" style="margin-top:10px;font-size:11px;color:var(--text2);display:none"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Demo Data</div>
+        <p class="text-muted" style="font-size:12px;margin-bottom:10px">Load sample trades to explore the journal</p>
+        <button class="btn btn-secondary" onclick="loadDemoData()">Load Demo Trades</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TRADE LOG TAB -->
+<div class="tab-content" id="tab-log">
+  <div class="filters-bar">
+    <span class="filter-label">Filter:</span>
+    <input type="date" class="filter-input" id="filter-from" placeholder="From" onchange="renderLog()">
+    <input type="date" class="filter-input" id="filter-to" placeholder="To" onchange="renderLog()">
+    <input type="text" class="filter-input" id="filter-ticker" placeholder="Ticker (e.g. SPX)" style="width:120px" oninput="renderLog()">
+    <select class="filter-input" id="filter-outcome" onchange="renderLog()">
+      <option value="">All Outcomes</option>
+      <option value="win">Wins</option>
+      <option value="loss">Losses</option>
+      <option value="open">Open</option>
+    </select>
+    <select class="filter-input" id="filter-type" onchange="renderLog()">
+      <option value="">All Types</option>
+      <option value="CALL">Calls</option>
+      <option value="PUT">Puts</option>
+      <option value="Stock">Stock</option>
+    </select>
+    <button class="btn btn-secondary" onclick="clearFilters()" style="padding:6px 10px;font-size:11px">Clear</button>
+    <span class="text-muted" id="log-count" style="margin-left:auto;font-size:11px"></span>
+  </div>
+  <div class="trades-table-wrap card" id="log-table-container">
+    <div class="empty-state"><div class="empty-icon">📋</div><p>No trades yet — import a CSV to get started</p></div>
+  </div>
+</div>
+
+<!-- DASHBOARD TAB -->
+<div class="tab-content" id="tab-dashboard">
+  <div id="dashboard-empty" class="empty-state" style="margin-top:60px">
+    <div class="empty-icon">📊</div><p>Import trades to see your dashboard</p>
+  </div>
+  <div id="dashboard-content" style="display:none">
+    <div class="stat-grid" id="stat-grid"></div>
+    <div class="charts-grid">
+      <div class="card"><div class="card-title">Equity Curve</div><div class="chart-wrap"><canvas id="equityChart"></canvas></div></div>
+      <div class="card"><div class="card-title">P&amp;L Distribution</div><div class="chart-wrap"><canvas id="distChart"></canvas></div></div>
+    </div>
+    <div class="charts-grid-3">
+      <div class="card"><div class="card-title">P&amp;L by Ticker</div><div class="chart-wrap-sm"><canvas id="tickerChart"></canvas></div></div>
+      <div class="card"><div class="card-title">P&amp;L by Day of Week</div><div class="chart-wrap-sm"><canvas id="dowChart"></canvas></div></div>
+      <div class="card"><div class="card-title">P&amp;L by Hour</div><div class="chart-wrap-sm"><canvas id="hourChart"></canvas></div></div>
+    </div>
+    <div class="charts-grid-3">
+      <div class="card"><div class="card-title">Calls vs Puts P&amp;L</div><div class="chart-wrap-sm"><canvas id="cpChart"></canvas></div></div>
+      <div class="card"><div class="card-title">Win Rate by DTE Bucket</div><div class="chart-wrap-sm"><canvas id="dteChart"></canvas></div></div>
+      <div class="card"><div class="card-title">Monthly P&amp;L</div><div class="chart-wrap-sm"><canvas id="monthlyChart"></canvas></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR TAB -->
+<div class="tab-content" id="tab-calendar">
+  <div class="cal-nav">
+    <button class="cal-nav-btn" onclick="calPrev()">← Prev</button>
+    <span class="cal-month-label" id="cal-month-label"></span>
+    <button class="cal-nav-btn" onclick="calNext()">Next →</button>
+    <span class="cal-summary" id="cal-month-summary"></span>
+  </div>
+  <div class="cal-grid-wrap">
+    <div>
+      <div class="cal-grid" id="cal-header"></div>
+      <div class="cal-grid mt8" id="cal-cells" style="align-items:start"></div>
+    </div>
+    <div id="cal-detail-panel">
+      <div class="cal-detail-card">
+        <div class="card-title">Day Detail</div>
+        <div id="cal-detail-body" class="text-muted" style="font-size:12px">Click a day to see trades</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let allTrades = [];   // raw fills after parsing
+let tradeGroups = []; // grouped trade sessions
+let notes = {};       // { groupId: string }
+let charts = {};
+let calYear, calMonth;
+
+const MULTIPLIER = 100; // options multiplier
+
+// ═══════════════════════════════════════════════════════
+//  PERSISTENCE
+// ═══════════════════════════════════════════════════════
+function save() {
+  try {
+    localStorage.setItem('tj_trades', JSON.stringify(allTrades));
+    localStorage.setItem('tj_groups', JSON.stringify(tradeGroups));
+    localStorage.setItem('tj_notes', JSON.stringify(notes));
+  } catch(e) {}
+}
+function load() {
+  try {
+    const t = localStorage.getItem('tj_trades');
+    const g = localStorage.getItem('tj_groups');
+    const n = localStorage.getItem('tj_notes');
+    if (t) allTrades = JSON.parse(t);
+    if (g) tradeGroups = JSON.parse(g);
+    if (n) notes = JSON.parse(n);
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB NAV
+// ═══════════════════════════════════════════════════════
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  const tabs = ['import','log','dashboard','calendar'];
+  document.querySelectorAll('.nav-tab')[tabs.indexOf(id)].classList.add('active');
+  if (id === 'log') renderLog();
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'calendar') renderCalendar();
+}
+
+// ═══════════════════════════════════════════════════════
+//  DRAG & DROP
+// ═══════════════════════════════════════════════════════
+function handleDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('drop-zone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv') || f.name.endsWith('.txt'));
+  if (files.length) processFiles(files);
+}
+function handleFileSelect(e) { processFiles(Array.from(e.target.files)); e.target.value = ''; }
+
+// ═══════════════════════════════════════════════════════
+//  FILE PROCESSING
+// ═══════════════════════════════════════════════════════
+function processFiles(files) {
+  const logEl = document.getElementById('import-log');
+  const statusEl = document.getElementById('import-status');
+  const badgeEl = document.getElementById('import-broker-badge');
+  statusEl.style.display = 'block';
+  logEl.innerHTML = '';
+  let totalNew = 0;
+  let filesDone = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target.result;
+      const broker = detectBroker(text);
+      appendLog(logEl, `📄 ${file.name} — detected: ${broker.toUpperCase()}`, broker === 'unknown' ? 'warn' : 'ok');
+      const brokerLabel = broker === 'tos' ? '📊 Thinkorswim (Trade History)' : broker === 'tos_stmt' ? '📊 Thinkorswim (Account Statement)' : broker === 'ibkr' ? '🏦 Interactive Brokers' : '❓ Unknown Format';
+      badgeEl.innerHTML = `<span class="broker-badge ${broker === 'tos_stmt' ? 'tos' : broker}">${brokerLabel}</span>`;
+      let fills = [];
+      try {
+        if (broker === 'tos') fills = parseTOS(text);
+        else if (broker === 'tos_stmt') fills = parseTOSStatement(text);
+        else if (broker === 'ibkr') fills = parseIBKR(text);
+        else { appendLog(logEl, `⚠️ Could not determine broker format. Try TOS or IBKR export.`, 'warn'); }
+      } catch(err) { appendLog(logEl, `❌ Parse error: ${err.message}`, 'err'); }
+      if (fills.length) {
+        const before = allTrades.length;
+        // Deduplicate by composite key
+        const existing = new Set(allTrades.map(f => tradeKey(f)));
+        fills.forEach(f => { if (!existing.has(tradeKey(f))) allTrades.push(f); });
+        const added = allTrades.length - before;
+        totalNew += added;
+        appendLog(logEl, `✅ ${added} new fills added (${fills.length - added} duplicates skipped)`, 'ok');
+      }
+      filesDone++;
+      if (filesDone === files.length) {
+        allTrades.sort((a,b) => a.timestamp - b.timestamp);
+        tradeGroups = groupTrades(allTrades);
+        save();
+        updateNavCount();
+        appendLog(logEl, `─── Total: ${totalNew} fills → ${tradeGroups.length} trade groups ───`, 'ok');
+        if (totalNew > 0) {
+          appendLog(logEl, `💾 Hit "Save Journal" to back up your data to a .json file`, 'warn');
+          setSaveIndicator('unsaved', `Unsaved changes (${totalNew} new)`);
+        } else {
+          setSaveIndicator('saved', `${tradeGroups.length} trades`);
+        }
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+function tradeKey(f) {
+  return `${f.timestamp}|${f.symbol}|${f.side}|${f.qty}|${f.price}`;
+}
+
+function appendLog(el, msg, cls = '') {
+  const d = document.createElement('div');
+  d.className = `import-log-entry ${cls}`;
+  d.textContent = msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════
+//  BROKER DETECTION
+// ═══════════════════════════════════════════════════════
+function detectBroker(text) {
+  const top = text.slice(0, 3000).toLowerCase();
+  // TOS Account Statement: has DATE,TIME,TYPE header and BOT/SOLD descriptions
+  if (top.includes('date,time,type') || (top.includes(',trd,') && (top.includes('bot +') || top.includes('sold -')))) return 'tos_stmt';
+  // TOS Account Trade History: has Exec Time / Pos Effect columns
+  if (top.includes('exec time') || top.includes('net price') || top.includes('pos effect') || top.includes('thinkorswim')) return 'tos';
+  // IBKR
+  if (top.includes('trades,header') || top.includes('t. price') || top.includes('comm/fee') || top.includes('ibkr') || top.includes('interactive brokers') || (top.includes('trades,') && top.includes('proceeds'))) return 'ibkr';
+  if (top.includes('exec time') || (top.includes('side') && top.includes('qty') && top.includes('spread'))) return 'tos';
+  return 'unknown';
+}
+
+// ═══════════════════════════════════════════════════════
+//  CSV HELPERS
+// ═══════════════════════════════════════════════════════
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+    else { current += ch; }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function cleanNum(s) {
+  if (!s || s === '' || s === '--') return 0;
+  // TOS uses parentheses for negatives: (1.05) → -1.05
+  s = String(s).replace(/[$,\s]/g, '');
+  if (s.startsWith('(') && s.endsWith(')')) return -parseFloat(s.slice(1, -1)) || 0;
+  return parseFloat(s) || 0;
+}
+
+function parseDateTime(dateStr, timeStr) {
+  if (!dateStr) return 0;
+  let combined = timeStr ? `${dateStr} ${timeStr}` : dateStr;
+  combined = combined.replace(';', ' ').trim();
+  // TOS Account Statement: M/D/YY HH:MM:SS  (e.g. "4/1/26 10:38:44")
+  const shortYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(.+)$/);
+  if (shortYr) {
+    const [, mo, dy, yy, rest] = shortYr;
+    const ts = new Date(`${2000+parseInt(yy)}-${mo.padStart(2,'0')}-${dy.padStart(2,'0')}T${rest}`).getTime();
+    if (!isNaN(ts)) return ts;
+  }
+  // IBKR: "2024-01-15, 09:35:22"
+  const d = new Date(combined);
+  if (!isNaN(d.getTime())) return d.getTime();
+  // MM/DD/YYYY HH:MM:SS
+  const longYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(.*)$/);
+  if (longYr) return new Date(`${longYr[3]}-${longYr[1].padStart(2,'0')}-${longYr[2].padStart(2,'0')} ${longYr[4]}`).getTime();
+  return 0;
+}
+
+function parseOptionSymbol(sym, exp, strike, type, desc) {
+  // Returns { underlying, expDate, strike, optType, dte }
+  sym = (sym || '').trim().replace(/\s+/g, ' ');
+  // OCC format: .SPX240119C04800000 or SPX   240119C04800000
+  const occ = sym.replace(/\s+/g,'').replace(/^\./,'');
+  const occMatch = occ.match(/^([A-Z]{1,6})(\d{6})([CP])(\d+)$/);
+  if (occMatch) {
+    const [,und, yymmdd, cp, stk] = occMatch;
+    const yr = '20' + yymmdd.slice(0,2);
+    const mo = yymmdd.slice(2,4);
+    const dy = yymmdd.slice(4,6);
+    const expDate = `${yr}-${mo}-${dy}`;
+    return { underlying: und, expDate, strike: parseInt(stk)/1000, optType: cp === 'C' ? 'CALL' : 'PUT' };
+  }
+  // TOS separate columns
+  if (exp && strike) {
+    const expDate = parseTOSExp(exp);
+    return { underlying: sym.replace(/^\./,'').split(' ')[0], expDate, strike: parseFloat(strike), optType: (type||'').toUpperCase().startsWith('C') ? 'CALL' : 'PUT' };
+  }
+  // IBKR description: "SPX 19JAN24 4800 C"
+  const descMatch = (desc||'').match(/^([A-Z]+)\s+(\d{1,2})([A-Z]{3})(\d{2})\s+([\d.]+)\s+([CP])/);
+  if (descMatch) {
+    const months = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+    const d = new Date(2000+parseInt(descMatch[4]), months[descMatch[3]], parseInt(descMatch[2]));
+    return { underlying: descMatch[1], expDate: d.toISOString().slice(0,10), strike: parseFloat(descMatch[5]), optType: descMatch[6] === 'C' ? 'CALL' : 'PUT' };
+  }
+  return { underlying: sym.split(' ')[0], expDate: null, strike: null, optType: null };
+}
+
+function parseTOSExp(exp) {
+  // "Jan 19 2024" or "19 Jan 24" or "2024-01-19"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(exp)) return exp;
+  const d = new Date(exp);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  return exp;
+}
+
+function calcDTE(tradeTs, expDate) {
+  if (!expDate) return null;
+  const exp = new Date(expDate + 'T16:00:00');
+  const trade = new Date(tradeTs);
+  return Math.max(0, Math.round((exp - trade) / 86400000));
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOS ACCOUNT STATEMENT PARSER  (DATE,TIME,TYPE,REF#,DESCRIPTION…)
+// ═══════════════════════════════════════════════════════
+function parseTOSStatement(text) {
+  const lines = text.split(/\r?\n/);
+  const fills = [];
+  const MONTHS = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+  // Matches: BOT +5 SPX 100 (Weeklys) 1 APR 26 6625 CALL @1.80
+  //      or: BOT +4 SNDK 100 17 APR 26 800 CALL @18.20   (no spread label)
+  //      or: tIP SOLD -4 SPX 100 (Weeklys) 10 APR 26 6815 CALL @7.60
+  const re = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+([A-Z\/\.]+)\s+100\s*(?:\([^)]+\)\s+)?(\d{1,2})\s+([A-Z]{3})\s+(\d{2})\s+([\d.]+)\s+(CALL|PUT)\s+@([\d.]+)/i;
+  // Also handle stock / non-option rows like: BOT +100 AAPL @185.20
+  const stockRe = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+([A-Z\/\.]+)\s+@([\d.]+)$/i;
+
+  // Only parse rows where TYPE = TRD and the section is Cash Balance (equity options)
+  // Skip Futures and Forex sections
+  let inCashSection = true;
+  for (const line of lines) {
+    const raw = line.trim();
+    if (!raw) continue;
+    // Detect section boundaries
+    if (/^Futures Statements/i.test(raw) || /^Forex Statements/i.test(raw)) { inCashSection = false; }
+    if (/^Cash Balance/i.test(raw)) { inCashSection = true; }
+    if (!inCashSection) continue;
+
+    const cols = parseCSVLine(raw);
+    if (cols.length < 7) continue;
+    // Support both 8-col (Cash) and padded variants
+    // DATE, TIME, TYPE, REF #, DESCRIPTION, Misc Fees, Comm & Fees, AMOUNT, BALANCE
+    const [dateCol, timeCol, typeCol, , descCol, miscFeesCol, commFeesCol, amountCol] = cols;
+    if (typeCol !== 'TRD') continue;
+
+    // Strip known prefixes like "tIP" but NOT "BOT" or "SOLD"
+    const desc = descCol.replace(/^(?!BOT\b|SOLD\b)[A-Za-z]+\s+/, '').trim();
+
+    const m = desc.match(re);
+    if (m) {
+      const [, action, qtyStr, sym, day, mon, yr, strike, optType, priceStr] = m;
+      const expYear = 2000 + parseInt(yr);
+      const expMonth = MONTHS[mon.toUpperCase()];
+      const expDay = parseInt(day);
+      const expDate = new Date(expYear, expMonth, expDay).toISOString().slice(0, 10);
+      const ts = parseDateTime(dateCol, timeCol);
+      if (!ts) continue;
+      const commission = Math.abs(cleanNum(miscFeesCol)) + Math.abs(cleanNum(commFeesCol));
+      fills.push({
+        broker: 'tos', timestamp: ts,
+        date: new Date(ts).toISOString().slice(0, 10),
+        symbol: `${sym} ${expDate} ${strike} ${optType.toUpperCase()}`,
+        underlying: sym.toUpperCase(),
+        expDate,
+        strike: parseFloat(strike),
+        optType: optType.toUpperCase(),
+        isOption: true,
+        side: action.toUpperCase() === 'BOT' ? 'BUY' : 'SELL',
+        qty: parseInt(qtyStr),
+        price: parseFloat(priceStr),
+        commission,
+        netAmount: cleanNum(amountCol),
+        spread: '',
+      });
+      continue;
+    }
+    // Fallback: plain stock trade
+    const sm = desc.match(stockRe);
+    if (sm) {
+      const [, action, qtyStr, sym, priceStr] = sm;
+      const ts = parseDateTime(dateCol, timeCol);
+      if (!ts) continue;
+      const commission = Math.abs(cleanNum(miscFeesCol)) + Math.abs(cleanNum(commFeesCol));
+      fills.push({
+        broker: 'tos', timestamp: ts,
+        date: new Date(ts).toISOString().slice(0, 10),
+        symbol: sym.toUpperCase(),
+        underlying: sym.toUpperCase(),
+        expDate: null, strike: null, optType: null, isOption: false,
+        side: action.toUpperCase() === 'BOT' ? 'BUY' : 'SELL',
+        qty: parseInt(qtyStr),
+        price: parseFloat(priceStr),
+        commission,
+        netAmount: cleanNum(amountCol),
+        spread: '',
+      });
+    }
+  }
+  return fills;
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOS ACCOUNT TRADE HISTORY PARSER  (Exec Time, Spread, Side…)
+// ═══════════════════════════════════════════════════════
+function parseTOS(text) {
+  const lines = text.split(/\r?\n/);
+  let headers = null;
+  const fills = [];
+  // Find header row
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cells = parseCSVLine(line);
+    const lower = cells.map(c => c.toLowerCase());
+    if (lower.some(c => c.includes('exec time') || c === 'side' || c.includes('exec date'))) {
+      headers = cells.map(c => c.toLowerCase().replace(/['"]/g,'').trim());
+      // Parse data rows
+      for (let j = i + 1; j < lines.length; j++) {
+        const row = lines[j].trim();
+        if (!row) continue;
+        const cols = parseCSVLine(row);
+        if (cols.length < 4) continue;
+        const get = k => {
+          const idx = headers.indexOf(k);
+          return idx >= 0 ? (cols[idx]||'').replace(/^"|"$/g,'').trim() : '';
+        };
+        // Try multiple column name variants
+        const execTime = get('exec time') || get('exec date') || get('date') || get('datetime');
+        if (!execTime || execTime.toLowerCase() === 'exec time') continue;
+        const side = (get('side') || get('buy/sell') || get('action')).toUpperCase();
+        if (!['BUY','SELL','BTO','STO','BTC','STC'].some(s => side.startsWith(s))) continue;
+        const qty = Math.abs(cleanNum(get('qty') || get('quantity')));
+        if (!qty) continue;
+        const price = cleanNum(get('price') || get('net price') || get('avg price'));
+        const commission = cleanNum(get('commission') || get('comm'));
+        const regFees = cleanNum(get('reg fees') || get('reg fee'));
+        const netAmount = cleanNum(get('net amount') || get('proceeds'));
+        const sym = get('symbol');
+        const exp = get('exp') || get('expiry') || get('expiration');
+        const strike = get('strike');
+        const optType = get('type') || get('put/call') || get('p/c') || get('pc');
+        const spread = get('spread');
+        const posEffect = (get('pos effect') || '').toLowerCase();
+        const isOpen = posEffect.includes('open') || side.includes('O');
+        const normalSide = side.startsWith('B') ? 'BUY' : 'SELL';
+        const ts = parseDateTime(execTime);
+        if (!ts) continue;
+        const optInfo = parseOptionSymbol(sym, exp, strike, optType, '');
+        const isOption = !!(optInfo.expDate || optInfo.strike);
+        fills.push({
+          broker: 'tos', timestamp: ts,
+          date: new Date(ts).toISOString().slice(0,10),
+          symbol: sym,
+          underlying: optInfo.underlying || sym,
+          expDate: optInfo.expDate,
+          strike: optInfo.strike,
+          optType: optInfo.optType,
+          isOption,
+          side: normalSide,
+          isOpen,
+          qty,
+          price: Math.abs(price),
+          commission: Math.abs(commission) + Math.abs(regFees),
+          netAmount,
+          spread: spread || '',
+        });
+      }
+      break;
+    }
+  }
+  return fills;
+}
+
+// ═══════════════════════════════════════════════════════
+//  IBKR PARSER
+// ═══════════════════════════════════════════════════════
+function parseIBKR(text) {
+  const lines = text.split(/\r?\n/);
+  const fills = [];
+  let tradeHeaders = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cells = parseCSVLine(line);
+    // Find the Trades header row
+    if (cells[0] === 'Trades' && cells[1] === 'Header') {
+      tradeHeaders = cells.map(c => c.toLowerCase().trim());
+      continue;
+    }
+    // Process trade data rows
+    if (tradeHeaders && cells[0] === 'Trades' && (cells[1] === 'Data' || cells[1] === 'SubTotal' === false)) {
+      if (cells[1] !== 'Data') continue;
+      const get = k => {
+        const idx = tradeHeaders.indexOf(k);
+        return idx >= 0 ? (cells[idx]||'').trim() : '';
+      };
+      const assetCat = (get('asset category') || '').toLowerCase();
+      if (!assetCat.includes('option') && !assetCat.includes('stock') && !assetCat.includes('equity') && !assetCat.includes('future')) continue;
+      const sym = get('symbol') || get('financial instrument');
+      const dtRaw = get('date/time') || get('datetime') || get('trade date');
+      const qty = cleanNum(get('quantity'));
+      const tprice = cleanNum(get('t. price') || get('trade price') || get('price'));
+      const comm = cleanNum(get('comm/fee') || get('commission') || get('commissions'));
+      const proceeds = cleanNum(get('proceeds'));
+      const realizedPL = cleanNum(get('realized p/l') || get('realized p&l'));
+      if (!sym || !qty || !tprice) continue;
+      const ts = parseDateTime(dtRaw.replace(',', ''));
+      if (!ts) continue;
+      const side = qty > 0 ? 'BUY' : 'SELL';
+      const absQty = Math.abs(qty);
+      const isOption = assetCat.includes('option');
+      const optInfo = isOption ? parseOptionSymbol(sym, '', '', '', '') : { underlying: sym, expDate: null, strike: null, optType: null };
+      fills.push({
+        broker: 'ibkr', timestamp: ts,
+        date: new Date(ts).toISOString().slice(0,10),
+        symbol: sym.trim(),
+        underlying: optInfo.underlying || sym.trim(),
+        expDate: optInfo.expDate,
+        strike: optInfo.strike,
+        optType: optInfo.optType,
+        isOption,
+        side,
+        qty: absQty,
+        price: Math.abs(tprice),
+        commission: Math.abs(comm),
+        netAmount: proceeds,
+        realizedPL,
+        spread: '',
+      });
+    }
+    // Also handle simple flat CSV (no "Trades,Header" prefix — some IBKR exports)
+    if (!tradeHeaders) {
+      // Try detecting a simple header
+      const lower = cells.map(c => c.toLowerCase().trim());
+      if (lower.some(c => c === 't. price') || lower.some(c => c === 'comm/fee')) {
+        tradeHeaders = ['_dummy_', '_dummy2_', ...lower]; // prefix two dummy cols to align
+        // Actually restart with proper flat parse
+        // Flat IBKR: Symbol, Date/Time, Quantity, T. Price, C. Price, Proceeds, Comm/Fee...
+        tradeHeaders = lower;
+        continue;
+      }
+    }
+  }
+  return fills;
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRADE GROUPING
+// ═══════════════════════════════════════════════════════
+function groupTrades(fills) {
+  // Group fills by underlying symbol + calendar date
+  const map = new Map();
+  fills.forEach(f => {
+    const key = `${f.underlying}|${f.date}|${f.expDate || ''}|${f.strike || ''}|${f.optType || ''}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(f);
+  });
+
+  const groups = [];
+  map.forEach((group_fills, key) => {
+    group_fills.sort((a, b) => a.timestamp - b.timestamp);
+    const first = group_fills[0];
+    const last = group_fills[group_fills.length - 1];
+    // Calculate P&L using FIFO matching
+    const buys = [], sells = [];
+    let totalCommission = 0;
+    group_fills.forEach(f => {
+      totalCommission += f.commission || 0;
+      if (f.side === 'BUY') buys.push({qty: f.qty, price: f.price});
+      else sells.push({qty: f.qty, price: f.price});
+    });
+    const totalBuyQty = buys.reduce((s,b) => s+b.qty, 0);
+    const totalSellQty = sells.reduce((s,s2) => s+s2.qty, 0);
+    const avgBuy = buys.length ? buys.reduce((s,b) => s+b.price*b.qty, 0) / totalBuyQty : 0;
+    const avgSell = sells.length ? sells.reduce((s,s2) => s+s2.price*s2.qty, 0) / totalSellQty : 0;
+    const netPos = totalBuyQty - totalSellQty;
+    const closedQty = Math.min(totalBuyQty, totalSellQty);
+    const mult = first.isOption ? MULTIPLIER : 1;
+    // Gross P&L on closed portion
+    let grossPnl = 0;
+    if (closedQty > 0) {
+      // Direction: net long entry (more buys first), or net short
+      if (totalBuyQty >= totalSellQty) {
+        grossPnl = (avgSell - avgBuy) * closedQty * mult;
+      } else {
+        grossPnl = (avgSell - avgBuy) * closedQty * mult;
+      }
+    }
+    // Add unrealized for open positions (show as 0 P&L marked with open tag)
+    const netPnl = grossPnl - totalCommission;
+    const isOpen = Math.abs(netPos) > 0.001;
+    const totalCostBasis = buys.reduce((s, b) => s + b.price * b.qty * mult, 0);
+    const rrPct = totalCostBasis > 0 && !isOpen ? (netPnl / totalCostBasis) * 100 : null;
+    const dte = calcDTE(first.timestamp, first.expDate);
+    const id = key + '|' + first.timestamp;
+    groups.push({
+      id,
+      date: first.date,
+      entryTime: new Date(first.timestamp).toISOString().slice(11,16),
+      exitTime: new Date(last.timestamp).toISOString().slice(11,16),
+      durationMin: Math.round((last.timestamp - first.timestamp) / 60000),
+      underlying: first.underlying,
+      symbol: first.symbol,
+      expDate: first.expDate,
+      strike: first.strike,
+      optType: first.optType,
+      isOption: first.isOption,
+      broker: first.broker,
+      fills: group_fills,
+      totalBuyQty,
+      totalSellQty,
+      avgBuy,
+      avgSell,
+      netPos,
+      isOpen,
+      closedQty,
+      grossPnl,
+      totalCommission,
+      netPnl: isOpen ? null : netPnl,
+      rrPct,
+      totalCostBasis,
+      dte,
+    });
+  });
+  groups.sort((a,b) => new Date(b.date) - new Date(a.date) || b.entryTime.localeCompare(a.entryTime));
+  return groups;
+}
+
+// ═══════════════════════════════════════════════════════
+//  FORMATTING HELPERS
+// ═══════════════════════════════════════════════════════
+function fmt$(n, digits=2) {
+  if (n === null || n === undefined) return '—';
+  const abs = Math.abs(n);
+  const s = abs >= 1000 ? abs.toLocaleString('en-US', {minimumFractionDigits:digits,maximumFractionDigits:digits}) : abs.toFixed(digits);
+  return (n < 0 ? '-$' : '$') + s;
+}
+function fmtPct(n) { return n === null ? '—' : n.toFixed(1) + '%'; }
+function pnlClass(n) { return n === null ? 'pnl-zero' : n > 0 ? 'pnl-pos' : n < 0 ? 'pnl-neg' : 'pnl-zero'; }
+function dteBadge(dte) {
+  if (dte === null) return '';
+  const cls = dte === 0 ? 'dte-0' : dte <= 14 ? 'dte-14' : 'dte-30';
+  return `<span class="dte-badge ${cls}">${dte}d</span>`;
+}
+function fmtDuration(min) {
+  if (!min || min < 1) return '<1m';
+  if (min < 60) return `${min}m`;
+  return `${Math.floor(min/60)}h ${min%60}m`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  SCALING VISUALIZATION
+// ═══════════════════════════════════════════════════════
+function buildScaleViz(g) {
+  const sorted = g.fills.slice().sort((a, b) => a.timestamp - b.timestamp);
+  const mult = g.isOption ? MULTIPLIER : 1;
+
+  // Simulate position and running P&L through fills
+  // Tracks both long (avgLongCost) and short (avgShortCost) legs correctly
+  let pos = 0, avgLongCost = 0, avgShortCost = 0, runningPnl = 0, totalComm = 0;
+  const steps = sorted.map(f => {
+    let legPnl = null;
+    totalComm += f.commission || 0;
+    if (f.side === 'BUY') {
+      if (pos < 0) {
+        // Closing a short position
+        const closingQty = Math.min(f.qty, Math.abs(pos));
+        legPnl = closingQty * (avgShortCost - f.price) * mult;
+        runningPnl += legPnl;
+        pos += f.qty;
+        if (pos > 0) { avgLongCost = f.price; } // crossed zero into new long
+      } else {
+        // Adding to / opening a long
+        const newTotal = pos * avgLongCost + f.qty * f.price;
+        pos += f.qty;
+        avgLongCost = pos > 0 ? newTotal / pos : f.price;
+      }
+    } else {
+      if (pos > 0) {
+        // Closing a long position
+        const closingQty = Math.min(f.qty, pos);
+        legPnl = closingQty * (f.price - avgLongCost) * mult;
+        runningPnl += legPnl;
+        pos -= f.qty;
+        if (pos < 0) { avgShortCost = f.price; } // crossed zero into new short
+      } else {
+        // Adding to / opening a short
+        const addQty = f.qty;
+        const newTotal = Math.abs(pos) * avgShortCost + addQty * f.price;
+        pos -= f.qty;
+        avgShortCost = Math.abs(pos) > 0 ? newTotal / Math.abs(pos) : f.price;
+      }
+    }
+    return { f, posAfter: pos, legPnl, runningPnl: runningPnl - totalComm };
+  });
+
+  const maxPos = Math.max(...steps.map(s => Math.abs(s.posAfter)), 1);
+  // Entry cost basis for risk calculation
+  const totalPremiumPaid = sorted.filter(f => f.side === 'BUY').reduce((s, f) => s + f.qty * f.price * mult, 0);
+
+  // Buy fills markers for the summary
+  const buyFills = sorted.filter(f => f.side === 'BUY');
+  const sellFills = sorted.filter(f => f.side === 'SELL');
+  const scalePattern = sellFills.map(f => f.qty).join('+');
+
+  let rows = steps.map((step, i) => {
+    const { f, posAfter, legPnl } = step;
+    const barPct = maxPos > 0 ? (Math.abs(posAfter) / maxPos * 100).toFixed(1) : 0;
+    const barClass = posAfter > 0 ? 'long' : posAfter < 0 ? 'short' : 'zero';
+    const legHtml = legPnl !== null
+      ? `<span class="${legPnl >= 0 ? 'leg-pnl-pos' : 'leg-pnl-neg'}">${legPnl >= 0 ? '+' : ''}${fmt$(legPnl)}</span>`
+      : `<span style="color:var(--text2);font-size:11px">—</span>`;
+    const cumHtml = i === steps.length - 1 && step.runningPnl !== 0
+      ? `<span class="${pnlClass(step.runningPnl)}" style="font-family:monospace;font-size:11px"> = ${fmt$(step.runningPnl)} net</span>`
+      : '';
+    return `<tr>
+      <td style="color:var(--text2);font-family:monospace;font-size:11px;white-space:nowrap">${new Date(f.timestamp).toISOString().slice(11,16)}</td>
+      <td><span class="${f.side === 'BUY' ? 'side-buy' : 'side-sell'}" style="font-size:11px;font-weight:700">${f.side === 'BUY' ? '▲ BUY' : '▼ SELL'}</span></td>
+      <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">${f.qty}</td>
+      <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">$${f.price.toFixed(2)}</td>
+      <td>
+        <div class="pos-bar-wrap">
+          <div class="pos-bar-track">
+            <div class="pos-bar-fill ${barClass}" style="width:${barPct}%"></div>
+          </div>
+          <span class="pos-label">${posAfter > 0 ? '+' : ''}${posAfter}</span>
+        </div>
+      </td>
+      <td>${legHtml}${cumHtml}</td>
+      <td style="color:var(--text2);font-size:11px">$${(f.commission||0).toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  const scaleDesc = buyFills.length > 1
+    ? `Scaled in: ${buyFills.map(f=>f.qty).join(' + ')} contracts`
+    : `Single entry: ${buyFills[0]?.qty || '—'} contracts`;
+  const exitDesc = sellFills.length > 1
+    ? `Scaled out: ${scalePattern} contracts`
+    : sellFills.length === 1 ? `Single exit: ${sellFills[0]?.qty || '—'} contracts` : 'Still open';
+
+  return `<div class="scale-viz">
+    <div class="scale-viz-title">
+      <span>Position Timeline</span>
+      <span style="font-weight:400;color:var(--text2)">${scaleDesc} &nbsp;·&nbsp; ${exitDesc}</span>
+    </div>
+    <table class="scale-table">
+      <thead><tr>
+        <th>Time</th><th>Side</th><th style="text-align:right">Qty</th><th style="text-align:right">Price</th>
+        <th>Position Size</th><th>Leg P&amp;L</th><th>Comm</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="scale-summary">
+      <span class="scale-summary-item">Max position: <strong>${maxPos} contracts</strong></span>
+      <span class="scale-summary-item">Total fills: <strong>${sorted.length}</strong></span>
+      <span class="scale-summary-item">At risk (cost basis): <strong>${fmt$(totalPremiumPaid)}</strong></span>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRADE LOG RENDERING
+// ═══════════════════════════════════════════════════════
+function clearFilters() {
+  ['filter-from','filter-to','filter-ticker'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('filter-outcome').value = '';
+  document.getElementById('filter-type').value = '';
+  renderLog();
+}
+
+function getFilteredGroups() {
+  const from = document.getElementById('filter-from').value;
+  const to = document.getElementById('filter-to').value;
+  const ticker = document.getElementById('filter-ticker').value.toUpperCase().trim();
+  const outcome = document.getElementById('filter-outcome').value;
+  const type = document.getElementById('filter-type').value;
+  return tradeGroups.filter(g => {
+    if (from && g.date < from) return false;
+    if (to && g.date > to) return false;
+    if (ticker && !g.underlying.toUpperCase().includes(ticker)) return false;
+    if (outcome === 'win' && (g.netPnl === null || g.netPnl <= 0)) return false;
+    if (outcome === 'loss' && (g.netPnl === null || g.netPnl >= 0)) return false;
+    if (outcome === 'open' && !g.isOpen) return false;
+    if (type && g.optType !== type && !(type === 'Stock' && !g.isOption)) return false;
+    return true;
+  });
+}
+
+function renderLog() {
+  const container = document.getElementById('log-table-container');
+  const filtered = getFilteredGroups();
+  document.getElementById('log-count').textContent = `${filtered.length} trades`;
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">${tradeGroups.length ? '🔍' : '📋'}</div><p>${tradeGroups.length ? 'No trades match your filters' : 'No trades yet — import a CSV to get started'}</p></div>`;
+    return;
+  }
+  const totalPnl = filtered.filter(g => g.netPnl !== null).reduce((s,g) => s + g.netPnl, 0);
+  const wins = filtered.filter(g => g.netPnl !== null && g.netPnl > 0).length;
+  const closed = filtered.filter(g => g.netPnl !== null).length;
+  let html = `<div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+    <span class="text-muted">Total P&L: <strong class="${pnlClass(totalPnl)}">${fmt$(totalPnl)}</strong></span>
+    <span class="text-muted">Win Rate: <strong>${closed ? fmtPct(wins/closed*100) : '—'}</strong></span>
+    <span class="text-muted">Closed: <strong>${closed}</strong></span>
+    <span class="text-muted">Open: <strong>${filtered.filter(g=>g.isOpen).length}</strong></span>
+  </div>
+  <table>
+    <thead><tr>
+      <th></th>
+      <th>Date</th>
+      <th>Time</th>
+      <th>Instrument</th>
+      <th>Type</th>
+      <th class="num">Bought</th>
+      <th class="num">Avg Entry</th>
+      <th class="num">Avg Exit</th>
+      <th class="num">Sold</th>
+      <th class="num">Commissions</th>
+      <th class="num">Net P&L</th>
+      <th class="num">R:R</th>
+      <th>DTE</th>
+      <th>Duration</th>
+    </tr></thead>
+    <tbody id="log-tbody">`;
+
+  filtered.forEach((g, idx) => {
+    const noteVal = (notes[g.id] || '').replace(/"/g, '&quot;');
+    const typeTag = g.isOption
+      ? `<span class="tag ${g.optType === 'CALL' ? 'tag-call' : 'tag-put'}">${g.optType}</span>`
+      : `<span class="tag tag-stock">STOCK</span>`;
+    const pnlDisplay = g.isOpen
+      ? `<span class="tag tag-open">OPEN</span>`
+      : `<span class="${pnlClass(g.netPnl)}">${fmt$(g.netPnl)}</span>`;
+    const optDetail = g.isOption && g.expDate
+      ? `<div class="option-detail">${g.expDate} ${g.strike ? g.strike : ''}</div>` : '';
+    html += `
+    <tr class="trade-row">
+      <td><button class="trade-expand-btn" onclick="toggleFills('fills-${idx}', this)">▶</button></td>
+      <td>${g.date}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--text2)">${g.entryTime}–${g.exitTime}</td>
+      <td><span class="ticker-badge">${g.underlying}</span>${optDetail}</td>
+      <td>${typeTag}</td>
+      <td class="num">${g.totalBuyQty || '—'}</td>
+      <td class="num">${g.avgBuy ? '$'+g.avgBuy.toFixed(2) : '—'}</td>
+      <td class="num">${g.avgSell ? '$'+g.avgSell.toFixed(2) : '—'}</td>
+      <td class="num">${g.totalSellQty || '—'}</td>
+      <td class="num text-muted">${fmt$(g.totalCommission)}</td>
+      <td class="num">${pnlDisplay}</td>
+      <td class="num">${g.rrPct !== null ? `<span class="${pnlClass(g.rrPct)}" style="font-size:12px;font-family:monospace">${g.rrPct >= 0 ? '+' : ''}${g.rrPct.toFixed(1)}%</span>` : '—'}</td>
+      <td>${dteBadge(g.dte)}</td>
+      <td style="color:var(--text2);font-size:11px">${fmtDuration(g.durationMin)}</td>
+    </tr>
+    <tr id="fills-${idx}" style="display:none" class="fills-row">
+      <td colspan="14">
+        <div class="fills-inner">
+          ${buildScaleViz(g)}
+          <div class="notes-wrap mt8">
+            <textarea class="notes-input" placeholder="Notes / lessons learned…" onchange="saveNote('${g.id}', this.value)">${noteVal}</textarea>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function toggleFills(id, btn) {
+  const row = document.getElementById(id);
+  const hidden = row.style.display === 'none';
+  row.style.display = hidden ? 'table-row' : 'none';
+  btn.textContent = hidden ? '▼' : '▶';
+}
+
+function saveNote(groupId, val) {
+  notes[groupId] = val;
+  save();
+}
+
+// ═══════════════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════════════
+function renderDashboard() {
+  const closed = tradeGroups.filter(g => g.netPnl !== null);
+  if (!closed.length) {
+    document.getElementById('dashboard-empty').style.display = 'block';
+    document.getElementById('dashboard-content').style.display = 'none';
+    return;
+  }
+  document.getElementById('dashboard-empty').style.display = 'none';
+  document.getElementById('dashboard-content').style.display = 'block';
+
+  const wins = closed.filter(g => g.netPnl > 0);
+  const losses = closed.filter(g => g.netPnl < 0);
+  const netPnl = closed.reduce((s,g) => s+g.netPnl, 0);
+  const grossWin = wins.reduce((s,g) => s+g.netPnl, 0);
+  const grossLoss = Math.abs(losses.reduce((s,g) => s+g.netPnl, 0));
+  const winRate = wins.length / closed.length * 100;
+  const avgWin = wins.length ? grossWin / wins.length : 0;
+  const avgLoss = losses.length ? grossLoss / losses.length : 0;
+  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : 0);
+  const rrRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
+  const largestWin = wins.length ? Math.max(...wins.map(g=>g.netPnl)) : 0;
+  const largestLoss = losses.length ? Math.max(...losses.map(g=>Math.abs(g.netPnl))) : 0;
+  // Max drawdown
+  let peak = 0, runningPnl = 0, maxDD = 0;
+  closed.slice().sort((a,b) => a.date.localeCompare(b.date) || a.entryTime.localeCompare(b.entryTime))
+    .forEach(g => {
+      runningPnl += g.netPnl;
+      if (runningPnl > peak) peak = runningPnl;
+      const dd = peak - runningPnl;
+      if (dd > maxDD) maxDD = dd;
+    });
+  const avgDuration = closed.reduce((s,g) => s+g.durationMin, 0) / closed.length;
+  // Consecutive streak
+  const sorted = closed.slice().sort((a,b) => a.date.localeCompare(b.date));
+  let streak = 0, streakType = '';
+  if (sorted.length > 0) {
+    const last = sorted[sorted.length-1];
+    streakType = last.netPnl > 0 ? 'W' : 'L';
+    for (let i = sorted.length-1; i >= 0; i--) {
+      if ((sorted[i].netPnl > 0 ? 'W' : 'L') === streakType) streak++;
+      else break;
+    }
+  }
+
+  const stats = [
+    { label: 'Net P&L', value: fmt$(netPnl), cls: netPnl >= 0 ? 'pnl-pos' : 'pnl-neg', sub: `${closed.length} trades`, highlight: true },
+    { label: 'Win Rate', value: fmtPct(winRate), sub: `${wins.length}W / ${losses.length}L` },
+    { label: 'Profit Factor', value: profitFactor === Infinity ? '∞' : profitFactor.toFixed(2), sub: grossLoss > 0 ? `${fmt$(grossWin)} / ${fmt$(grossLoss)}` : 'No losses' },
+    { label: 'Avg Win', value: fmt$(avgWin), cls: 'pnl-pos', sub: `${wins.length} trades` },
+    { label: 'Avg Loss', value: fmt$(avgLoss), cls: 'pnl-neg', sub: `${losses.length} trades` },
+    { label: 'R:R Ratio', value: rrRatio.toFixed(2), sub: 'Avg win / avg loss' },
+    { label: 'Largest Win', value: fmt$(largestWin), cls: 'pnl-pos' },
+    { label: 'Largest Loss', value: fmt$(largestLoss), cls: 'pnl-neg' },
+    { label: 'Max Drawdown', value: fmt$(maxDD), cls: 'pnl-neg', sub: 'Peak-to-trough' },
+    { label: 'Avg Duration', value: fmtDuration(Math.round(avgDuration)), sub: 'Per trade' },
+    { label: 'Current Streak', value: `${streak} ${streakType}`, cls: streakType === 'W' ? 'pnl-pos' : streakType === 'L' ? 'pnl-neg' : '' },
+    { label: 'Open Trades', value: String(tradeGroups.filter(g=>g.isOpen).length) },
+  ];
+
+  document.getElementById('stat-grid').innerHTML = stats.map(s => `
+    <div class="stat-card ${s.highlight ? 'highlight' : ''}">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value ${s.cls||''}">${s.value}</div>
+      ${s.sub ? `<div class="stat-sub">${s.sub}</div>` : ''}
+    </div>`).join('');
+
+  buildCharts(closed);
+}
+
+function buildCharts(closed) {
+  // Destroy existing
+  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e){} });
+  charts = {};
+  const sorted = closed.slice().sort((a,b) => a.date.localeCompare(b.date) || a.entryTime.localeCompare(b.entryTime));
+
+  // Equity curve
+  let running = 0;
+  const eqLabels = sorted.map(g => g.date);
+  const eqData = sorted.map(g => { running += g.netPnl; return running; });
+  charts.equity = new Chart(document.getElementById('equityChart'), {
+    type: 'line', data: {
+      labels: eqLabels,
+      datasets: [{ label: 'Equity', data: eqData, borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.08)', fill: true, tension: .3, pointRadius: 0, borderWidth: 2 }]
+    },
+    options: chartOpts({ yFormat: v => '$'+v.toLocaleString() })
+  });
+
+  // P&L Distribution histogram
+  const buckets = {};
+  const step = 100;
+  closed.forEach(g => {
+    const b = Math.round(g.netPnl / step) * step;
+    buckets[b] = (buckets[b] || 0) + 1;
+  });
+  const distKeys = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+  charts.dist = new Chart(document.getElementById('distChart'), {
+    type: 'bar', data: {
+      labels: distKeys.map(k => '$'+k),
+      datasets: [{ data: distKeys.map(k => buckets[k]), backgroundColor: distKeys.map(k => k >= 0 ? 'rgba(63,185,80,.6)' : 'rgba(248,81,73,.6)'), borderWidth: 0 }]
+    },
+    options: chartOpts({ legend: false })
+  });
+
+  // Ticker P&L
+  const tickerMap = {};
+  closed.forEach(g => { tickerMap[g.underlying] = (tickerMap[g.underlying]||0) + g.netPnl; });
+  const tickers = Object.entries(tickerMap).sort((a,b) => Math.abs(b[1])-Math.abs(a[1])).slice(0,10);
+  charts.ticker = new Chart(document.getElementById('tickerChart'), {
+    type: 'bar', data: {
+      labels: tickers.map(t=>t[0]),
+      datasets: [{ data: tickers.map(t=>t[1]), backgroundColor: tickers.map(t=>t[1]>=0?'rgba(63,185,80,.7)':'rgba(248,81,73,.7)'), borderWidth: 0 }]
+    },
+    options: chartOpts({ yFormat: v => '$'+Math.round(v), legend: false, horizontal: false })
+  });
+
+  // Day of week
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dowMap = Array(7).fill(0);
+  closed.forEach(g => { const d = new Date(g.date + 'T12:00:00').getDay(); dowMap[d] += g.netPnl; });
+  charts.dow = new Chart(document.getElementById('dowChart'), {
+    type: 'bar', data: {
+      labels: days,
+      datasets: [{ data: dowMap, backgroundColor: dowMap.map(v=>v>=0?'rgba(63,185,80,.7)':'rgba(248,81,73,.7)'), borderWidth: 0 }]
+    },
+    options: chartOpts({ yFormat: v => '$'+Math.round(v), legend: false })
+  });
+
+  // Hour of day
+  const hourMap = Array(24).fill(0);
+  closed.forEach(g => {
+    const h = parseInt(g.entryTime.split(':')[0]);
+    if (!isNaN(h)) hourMap[h] += g.netPnl;
+  });
+  const usedHours = hourMap.map((v,i)=>({v,i})).filter(x=>x.v!==0);
+  charts.hour = new Chart(document.getElementById('hourChart'), {
+    type: 'bar', data: {
+      labels: usedHours.map(x => x.i+':00'),
+      datasets: [{ data: usedHours.map(x=>x.v), backgroundColor: usedHours.map(x=>x.v>=0?'rgba(63,185,80,.7)':'rgba(248,81,73,.7)'), borderWidth: 0 }]
+    },
+    options: chartOpts({ yFormat: v => '$'+Math.round(v), legend: false })
+  });
+
+  // Calls vs Puts
+  const cpMap = { CALL: 0, PUT: 0, Stock: 0 };
+  closed.forEach(g => { const k = g.isOption ? g.optType : 'Stock'; cpMap[k] = (cpMap[k]||0) + g.netPnl; });
+  charts.cp = new Chart(document.getElementById('cpChart'), {
+    type: 'doughnut', data: {
+      labels: Object.keys(cpMap).filter(k=>cpMap[k]!==0),
+      datasets: [{ data: Object.entries(cpMap).filter(([,v])=>v!==0).map(([,v])=>v), backgroundColor: ['rgba(63,185,80,.7)','rgba(248,81,73,.7)','rgba(88,166,255,.7)'], borderWidth: 0 }]
+    },
+    options: { ...chartOpts({ legend: true }), cutout: '65%' }
+  });
+
+  // DTE bucket win rate
+  const dteBuckets = { '0 DTE': {w:0,t:0}, '1-7 DTE': {w:0,t:0}, '8-14 DTE': {w:0,t:0}, '15-30 DTE': {w:0,t:0}, '30+ DTE': {w:0,t:0} };
+  closed.forEach(g => {
+    const d = g.dte;
+    let bucket;
+    if (d === null) return;
+    if (d === 0) bucket = '0 DTE';
+    else if (d <= 7) bucket = '1-7 DTE';
+    else if (d <= 14) bucket = '8-14 DTE';
+    else if (d <= 30) bucket = '15-30 DTE';
+    else bucket = '30+ DTE';
+    dteBuckets[bucket].t++;
+    if (g.netPnl > 0) dteBuckets[bucket].w++;
+  });
+  const dteUsed = Object.entries(dteBuckets).filter(([,v])=>v.t>0);
+  charts.dte = new Chart(document.getElementById('dteChart'), {
+    type: 'bar', data: {
+      labels: dteUsed.map(([k])=>k),
+      datasets: [{ label: 'Win Rate %', data: dteUsed.map(([,v])=>v.t?+(v.w/v.t*100).toFixed(1):0), backgroundColor: 'rgba(88,166,255,.7)', borderWidth: 0 }]
+    },
+    options: chartOpts({ yFormat: v => v+'%', legend: false, max: 100 })
+  });
+
+  // Monthly P&L
+  const monthMap = {};
+  closed.forEach(g => { const m = g.date.slice(0,7); monthMap[m] = (monthMap[m]||0) + g.netPnl; });
+  const months = Object.keys(monthMap).sort();
+  charts.monthly = new Chart(document.getElementById('monthlyChart'), {
+    type: 'bar', data: {
+      labels: months,
+      datasets: [{ data: months.map(m=>monthMap[m]), backgroundColor: months.map(m=>monthMap[m]>=0?'rgba(63,185,80,.7)':'rgba(248,81,73,.7)'), borderWidth: 0 }]
+    },
+    options: chartOpts({ yFormat: v => '$'+Math.round(v), legend: false })
+  });
+}
+
+function chartOpts({ yFormat, legend=false, max } = {}) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: legend, labels: { color: '#8b949e', font: { size: 11 } } },
+      tooltip: { backgroundColor: '#21262d', borderColor: '#30363d', borderWidth: 1, titleColor: '#e6edf3', bodyColor: '#8b949e' }
+    },
+    scales: {
+      x: { grid: { color: 'rgba(48,54,61,.6)' }, ticks: { color: '#8b949e', font: { size: 10 }, maxRotation: 45 } },
+      y: { grid: { color: 'rgba(48,54,61,.6)' }, ticks: { color: '#8b949e', font: { size: 10 }, callback: yFormat || (v => v) }, ...(max !== undefined ? {max} : {}) }
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+//  CALENDAR
+// ═══════════════════════════════════════════════════════
+function renderCalendar() {
+  const now = new Date();
+  if (!calYear) { calYear = now.getFullYear(); calMonth = now.getMonth(); }
+  buildCalendar();
+}
+function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } buildCalendar(); }
+function calNext() { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } buildCalendar(); }
+
+function buildCalendar() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('cal-month-label').textContent = `${monthNames[calMonth]} ${calYear}`;
+
+  // Build day → P&L map
+  const dayMap = {};
+  tradeGroups.filter(g => g.netPnl !== null).forEach(g => {
+    const [y, m] = g.date.split('-').map(Number);
+    if (y === calYear && m-1 === calMonth) {
+      if (!dayMap[g.date]) dayMap[g.date] = { pnl: 0, trades: [] };
+      dayMap[g.date].pnl += g.netPnl;
+      dayMap[g.date].trades.push(g);
+    }
+  });
+
+  // Monthly summary
+  const monthPnl = Object.values(dayMap).reduce((s,d) => s+d.pnl, 0);
+  const tradeDays = Object.keys(dayMap).length;
+  const winDays = Object.values(dayMap).filter(d=>d.pnl>0).length;
+  document.getElementById('cal-month-summary').innerHTML =
+    `Month P&L: <strong class="${pnlClass(monthPnl)}">${fmt$(monthPnl)}</strong> &nbsp;|&nbsp; Days traded: ${tradeDays} &nbsp;|&nbsp; Win days: ${winDays}`;
+
+  // Header
+  const headerEl = document.getElementById('cal-header');
+  headerEl.innerHTML = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => `<div class="cal-header-cell">${d}</div>`).join('');
+
+  // Cells
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0,10);
+  let cells = '';
+  // Empty cells before first day
+  for (let i = 0; i < firstDay; i++) cells += `<div class="cal-cell empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const data = dayMap[dateStr];
+    let cls = '';
+    if (data) cls = data.pnl > 0 ? 'profit' : data.pnl < 0 ? 'loss' : 'breakeven';
+    if (dateStr === todayStr) cls += ' today';
+    const pnlHtml = data ? `<div class="cal-day-pnl ${pnlClass(data.pnl)}">${fmt$(data.pnl, 0)}</div><div class="cal-day-trades">${data.trades.length} trade${data.trades.length!==1?'s':''}</div>` : '';
+    cells += `<div class="cal-cell ${cls}" onclick="showDayDetail('${dateStr}')">
+      <div class="cal-day-num">${d}</div>${pnlHtml}
+    </div>`;
+  }
+  document.getElementById('cal-cells').innerHTML = cells;
+  document.getElementById('cal-detail-body').innerHTML = '<div class="text-muted" style="font-size:12px">Click a day to see trades</div>';
+}
+
+function showDayDetail(dateStr) {
+  document.querySelectorAll('.cal-cell.selected').forEach(el => el.classList.remove('selected'));
+  // Find and highlight the clicked cell
+  document.querySelectorAll('.cal-cell:not(.empty)').forEach(el => {
+    if (el.querySelector('.cal-day-num') && !el.classList.contains('empty')) {
+      const dayNum = parseInt(el.querySelector('.cal-day-num').textContent);
+      const [y,m,d] = dateStr.split('-').map(Number);
+      if (dayNum === d) el.classList.add('selected');
+    }
+  });
+  const dayGroups = tradeGroups.filter(g => g.date === dateStr);
+  const dayEl = document.getElementById('cal-detail-body');
+  if (!dayGroups.length) {
+    dayEl.innerHTML = `<div class="text-muted">No trades on ${dateStr}</div>`;
+    return;
+  }
+  const dayPnl = dayGroups.filter(g=>g.netPnl!==null).reduce((s,g)=>s+g.netPnl,0);
+  let html = `<div class="cal-detail-title">${dateStr}</div>`;
+  dayGroups.forEach(g => {
+    const pnlStr = g.netPnl !== null ? `<span class="${pnlClass(g.netPnl)}">${fmt$(g.netPnl)}</span>` : '<span class="tag tag-open">OPEN</span>';
+    html += `<div class="cal-detail-trade">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span><strong>${g.underlying}</strong> ${g.isOption && g.optType ? `<span class="tag ${g.optType==='CALL'?'tag-call':'tag-put'}">${g.optType}</span>` : ''}</span>
+        ${pnlStr}
+      </div>
+      <div class="text-muted" style="margin-top:3px;font-size:11px">${g.entryTime} · ${g.closedQty}×${g.avgBuy?'$'+g.avgBuy.toFixed(2):''} → ${g.avgSell?'$'+g.avgSell.toFixed(2):''} · ${fmtDuration(g.durationMin)}</div>
+    </div>`;
+  });
+  const closed = dayGroups.filter(g=>g.netPnl!==null);
+  const wins = closed.filter(g=>g.netPnl>0);
+  html += `<div class="cal-month-stats">
+    <div class="cal-stat-row"><span class="cal-stat-key">Day P&L</span><span class="${pnlClass(dayPnl)}">${fmt$(dayPnl)}</span></div>
+    <div class="cal-stat-row"><span class="cal-stat-key">Trades</span><span>${dayGroups.length}</span></div>
+    <div class="cal-stat-row"><span class="cal-stat-key">Win Rate</span><span>${closed.length ? fmtPct(wins.length/closed.length*100) : '—'}</span></div>
+    <div class="cal-stat-row"><span class="cal-stat-key">Commissions</span><span class="pnl-neg">-${fmt$(dayGroups.reduce((s,g)=>s+g.totalCommission,0))}</span></div>
+  </div>`;
+  dayEl.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════
+//  DEMO DATA
+// ═══════════════════════════════════════════════════════
+function loadDemoData() {
+  const today = new Date();
+  const demoFills = [];
+  const tickers = ['SPX','SPX','SPX','SPX','QQQ','NVDA'];
+  const types = ['CALL','PUT','CALL','PUT','CALL','CALL'];
+  const baseStrikes = [5200,5150,5250,5100,480,900];
+  for (let day = 0; day < 14; day++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - day);
+    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    const dateStr = d.toISOString().slice(0,10);
+    const numTrades = 1 + Math.floor(Math.random() * 3);
+    for (let t = 0; t < numTrades; t++) {
+      const tidx = Math.floor(Math.random() * tickers.length);
+      const sym = tickers[tidx];
+      const optType = types[tidx];
+      const strike = baseStrikes[tidx] + (Math.floor(Math.random()*10) - 5) * 25;
+      const expDate = new Date(d);
+      const dte = Math.floor(Math.random() * 14);
+      expDate.setDate(expDate.getDate() + dte);
+      const expStr = expDate.toISOString().slice(0,10);
+      const isOption = true;
+      const entryPrice = 5 + Math.random() * 20;
+      const moves = 1 + Math.floor(Math.random() * 3);
+      const entryQty = 5 + Math.floor(Math.random() * 10);
+      const tHour = 9 + Math.floor(Math.random() * 5);
+      const tMin = Math.floor(Math.random() * 60);
+      const baseTs = new Date(`${dateStr}T${String(tHour).padStart(2,'0')}:${String(tMin).padStart(2,'0')}:00`).getTime();
+      const direction = Math.random() > 0.45 ? 1 : -1; // slight edge
+      const exitPrice = Math.max(0.05, entryPrice * (1 + direction * (0.05 + Math.random() * 0.4)));
+      // Scale in: 1-2 buys
+      for (let b = 0; b < Math.min(moves, 2); b++) {
+        const qty = Math.ceil(entryQty / Math.min(moves,2));
+        const priceJitter = entryPrice * (1 + (Math.random()-.5) * .05);
+        demoFills.push({ broker: 'demo', timestamp: baseTs + b * 120000,
+          date: dateStr, symbol: `.${sym}${expStr.replace(/-/g,'').slice(2)}${optType[0]}${strike}000`,
+          underlying: sym, expDate: expStr, strike, optType, isOption: true, side: 'BUY', qty,
+          price: priceJitter, commission: qty * 0.65 + 0.02, netAmount: -(priceJitter * qty * 100) });
+      }
+      // Scale out
+      const sellTs = baseTs + (30 + Math.floor(Math.random() * 120)) * 60000;
+      demoFills.push({ broker: 'demo', timestamp: sellTs,
+        date: dateStr, symbol: `.${sym}${expStr.replace(/-/g,'').slice(2)}${optType[0]}${strike}000`,
+        underlying: sym, expDate: expStr, strike, optType, isOption: true, side: 'SELL', qty: entryQty,
+        price: exitPrice, commission: entryQty * 0.65 + 0.02, netAmount: exitPrice * entryQty * 100 });
+    }
+  }
+  allTrades = demoFills;
+  allTrades.sort((a,b) => a.timestamp - b.timestamp);
+  tradeGroups = groupTrades(allTrades);
+  save();
+  updateNavCount();
+  const logEl = document.getElementById('import-log');
+  const statusEl = document.getElementById('import-status');
+  const badgeEl = document.getElementById('import-broker-badge');
+  statusEl.style.display = 'block';
+  logEl.innerHTML = '';
+  badgeEl.innerHTML = `<span class="broker-badge tos">🎮 Demo Data Loaded</span>`;
+  appendLog(logEl, `✅ ${demoFills.length} demo fills → ${tradeGroups.length} trade groups`, 'ok');
+  appendLog(logEl, `ℹ️  Switch to Trade Log or Dashboard to explore`, 'ok');
+}
+
+// ═══════════════════════════════════════════════════════
+//  JOURNAL EXPORT / IMPORT  (File System Access API)
+// ═══════════════════════════════════════════════════════
+
+// In-memory handle for Quick Save (no dialog)
+let _savedFileHandle = null;
+const FS_API = typeof window !== 'undefined' && !!window.showSaveFilePicker;
+
+// ── IndexedDB: persist file handle across sessions ──
+function idbRequest(req) {
+  return new Promise((res, rej) => { req.onsuccess = e => res(e.target.result); req.onerror = e => rej(e.target.error); });
+}
+async function idbOpen() {
+  const req = indexedDB.open('tradelog_v1', 1);
+  req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+  return idbRequest(req);
+}
+async function idbPut(key, val) {
+  try { const db = await idbOpen(); const tx = db.transaction('handles','readwrite'); tx.objectStore('handles').put(val, key); await idbRequest(tx); } catch(e) {}
+}
+async function idbGet(key) {
+  try { const db = await idbOpen(); return await idbRequest(db.transaction('handles','readonly').objectStore('handles').get(key)); } catch(e) { return null; }
+}
+
+// ── Build payload ──
+function buildPayload() {
+  return {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    tradeCount: tradeGroups.length,
+    fillCount: allTrades.length,
+    trades: allTrades,
+    notes,
+  };
+}
+
+// ── Write to an already-obtained FileSystemFileHandle ──
+async function writeToHandle(handle, payload) {
+  const writable = await handle.createWritable();
+  await writable.write(JSON.stringify(payload, null, 2));
+  await writable.close();
+}
+
+// ── Save Journal (shows Save-As dialog first time, Quick Save after) ──
+async function exportJournal(forceDialog = false) {
+  if (!allTrades.length && !Object.keys(notes).length) {
+    alert('Nothing to save — import some trades first.'); return;
+  }
+  const payload = buildPayload();
+  const suggestedName = `TradeLog-${new Date().toISOString().slice(0,10)}.json`;
+
+  if (FS_API) {
+    // Try quick-save on existing handle first (unless dialog forced)
+    if (_savedFileHandle && !forceDialog) {
+      try {
+        const perm = await _savedFileHandle.queryPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+          await writeToHandle(_savedFileHandle, payload);
+          afterSave(_savedFileHandle.name);
+          return;
+        }
+        // Permission lapsed — re-request silently
+        const grant = await _savedFileHandle.requestPermission({ mode: 'readwrite' });
+        if (grant === 'granted') {
+          await writeToHandle(_savedFileHandle, payload);
+          afterSave(_savedFileHandle.name);
+          return;
+        }
+      } catch(e) { /* fall through to dialog */ }
+    }
+    // Show Save-As dialog
+    try {
+      const fh = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: 'TradeLog Journal', accept: { 'application/json': ['.json'] } }],
+        excludeAcceptAllOption: false,
+      });
+      await writeToHandle(fh, payload);
+      _savedFileHandle = fh;
+      await idbPut('fileHandle', fh);   // persist for next session
+      afterSave(fh.name);
+    } catch(e) {
+      if (e.name !== 'AbortError') showJournalStatus('❌ Save failed: ' + e.message, 'err');
+    }
+  } else {
+    // Fallback: browser download (Safari / Firefox)
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = suggestedName; a.click();
+    URL.revokeObjectURL(url);
+    afterSave(suggestedName);
+    showJournalStatus('ℹ️ Saved to your Downloads folder.\nFor Chrome/Edge: use "Save As…" to pick a custom folder.', 'warn');
+  }
+}
+
+function afterSave(name) {
+  save(); // also update localStorage cache
+  setSaveIndicator('saved', `Saved → ${name}`);
+  showJournalStatus(`✅ Saved to ${name}  (${tradeGroups.length} trades, ${allTrades.length} fills)`, 'ok');
+  updateQuickSaveBtn();
+}
+
+// ── Load Journal ──
+async function importJournal(event) {
+  let text;
+  if (event && event.target && event.target.files) {
+    // Fallback file input path
+    const file = event.target.files[0];
+    if (!file) return;
+    text = await file.text();
+    event.target.value = '';
+  }
+  mergeJournalText(text);
+}
+
+async function openJournalPicker() {
+  if (FS_API) {
+    try {
+      const [fh] = await window.showOpenFilePicker({
+        types: [{ description: 'TradeLog Journal', accept: { 'application/json': ['.json'] } }],
+        multiple: false,
+      });
+      const file = await fh.getFile();
+      const text = await file.text();
+      // Reuse this handle for future saves too
+      _savedFileHandle = fh;
+      await idbPut('fileHandle', fh);
+      mergeJournalText(text);
+      updateQuickSaveBtn();
+    } catch(e) {
+      if (e.name !== 'AbortError') showJournalStatus('❌ Could not open file: ' + e.message, 'err');
+    }
+  } else {
+    document.getElementById('journal-file-input').click();
+  }
+}
+
+function mergeJournalText(text) {
+  try {
+    const data = JSON.parse(text);
+    if (!data.trades || !Array.isArray(data.trades)) {
+      showJournalStatus('❌ Invalid journal file — missing trades array.', 'err'); return;
+    }
+    const existing = new Set(allTrades.map(f => tradeKey(f)));
+    let added = 0;
+    data.trades.forEach(f => { if (!existing.has(tradeKey(f))) { allTrades.push(f); existing.add(tradeKey(f)); added++; } });
+    if (data.notes) Object.entries(data.notes).forEach(([k, v]) => { if (!notes[k]) notes[k] = v; });
+    allTrades.sort((a, b) => a.timestamp - b.timestamp);
+    tradeGroups = groupTrades(allTrades);
+    save();
+    updateNavCount();
+    const skipped = data.trades.length - added;
+    showJournalStatus(
+      `✅ Loaded: ${added} new fills merged (${skipped} already present) → ${tradeGroups.length} trade groups` +
+      (data.exportedAt ? `\nFile saved: ${new Date(data.exportedAt).toLocaleString()}` : ''), 'ok'
+    );
+    setSaveIndicator('unsaved', `${tradeGroups.length} trades (unsaved changes)`);
+    const activeTab = document.querySelector('.nav-tab.active');
+    if (activeTab) activeTab.click();
+  } catch(err) {
+    showJournalStatus('❌ Could not parse file: ' + err.message, 'err');
+  }
+}
+
+// ── Restore saved file handle from last session ──
+async function restoreFileHandle() {
+  if (!FS_API) return;
+  try {
+    const fh = await idbGet('fileHandle');
+    if (fh) { _savedFileHandle = fh; updateQuickSaveBtn(); }
+  } catch(e) {}
+}
+
+function updateQuickSaveBtn() {
+  const btn = document.getElementById('quick-save-btn');
+  if (btn) {
+    btn.style.display = _savedFileHandle ? 'inline-flex' : 'none';
+    if (_savedFileHandle) btn.title = `Quick Save → ${_savedFileHandle.name}`;
+  }
+}
+
+function showJournalStatus(msg, cls) {
+  const el = document.getElementById('journal-status');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.color = cls === 'ok' ? 'var(--green)' : cls === 'err' ? 'var(--red)' : 'var(--yellow)';
+  el.style.whiteSpace = 'pre-line';
+  el.textContent = msg;
+}
+
+// ═══════════════════════════════════════════════════════
+//  UTILITY
+// ═══════════════════════════════════════════════════════
+function updateNavCount() {
+  document.getElementById('nav-trade-count').textContent = `${tradeGroups.length} trades`;
+}
+
+function setSaveIndicator(state, label) {
+  const dot = document.getElementById('save-dot');
+  const lbl = document.getElementById('save-label');
+  if (!dot || !lbl) return;
+  dot.className = 'save-dot' + (state === 'unsaved' ? ' unsaved' : '');
+  lbl.textContent = label || '';
+}
+
+function confirmClear() {
+  if (confirm('Clear all trade data? This cannot be undone.')) {
+    allTrades = []; tradeGroups = []; notes = {};
+    try { localStorage.removeItem('tj_trades'); localStorage.removeItem('tj_groups'); localStorage.removeItem('tj_notes'); } catch(e){}
+    updateNavCount();
+    renderLog();
+    document.getElementById('import-status').style.display = 'none';
+    setSaveIndicator('unsaved', 'No data');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+load();
+updateNavCount();
+if (tradeGroups.length) {
+  setSaveIndicator('saved', `${tradeGroups.length} trades (cached)`);
+} else {
+  setSaveIndicator('unsaved', 'No data');
+}
+// Show File System API support note
+if (FS_API) {
+  const n = document.getElementById('fs-api-note'); if (n) n.style.display = 'inline';
+} else {
+  const n = document.getElementById('fs-api-warn'); if (n) n.style.display = 'inline';
+}
+// Restore saved file handle from previous session
+restoreFileHandle();
+</script>
+</body>
+</html>
