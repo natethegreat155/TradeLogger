@@ -524,6 +524,39 @@ function cleanNum(s) {
   return parseFloat(s) || 0;
 }
 
+// ── Eastern Time helpers ──────────────────────────────────────────────────
+function parseAsET(isoStr) {
+  // Interpret a naive "YYYY-MM-DDTHH:MM:SS" string as Eastern Time → UTC ms
+  const approx = new Date(isoStr + 'Z');
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+  const p = Object.fromEntries(fmt.formatToParts(approx).map(x => [x.type, x.value]));
+  const etUTC = new Date(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}Z`).getTime();
+  const offset = etUTC - approx.getTime();
+  return approx.getTime() - offset;
+}
+
+function fmtETTime(ts) {
+  // Format UTC timestamp as HH:MM in Eastern Time
+  return new Date(ts).toLocaleString('en-US', {
+    timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false
+  });
+}
+
+function fmtETDate(ts) {
+  // Format UTC timestamp as YYYY-MM-DD in Eastern Time
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date(ts)).map(x => [x.type, x.value])
+  );
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
 function parseDateTime(dateStr, timeStr) {
   if (!dateStr) return 0;
   let combined = timeStr ? `${dateStr} ${timeStr}` : dateStr;
@@ -532,15 +565,17 @@ function parseDateTime(dateStr, timeStr) {
   const shortYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(.+)$/);
   if (shortYr) {
     const [, mo, dy, yy, rest] = shortYr;
-    const ts = new Date(`${2000+parseInt(yy)}-${mo.padStart(2,'0')}-${dy.padStart(2,'0')}T${rest}`).getTime();
+    const ts = parseAsET(`${2000+parseInt(yy)}-${mo.padStart(2,'0')}-${dy.padStart(2,'0')}T${rest}`);
     if (!isNaN(ts)) return ts;
   }
   // IBKR: "2024-01-15, 09:35:22"
+  const ibkr = combined.match(/^(\d{4}-\d{2}-\d{2})[,\s]+(\d{2}:\d{2}:\d{2})$/);
+  if (ibkr) { const ts = parseAsET(`${ibkr[1]}T${ibkr[2]}`); if (!isNaN(ts)) return ts; }
   const d = new Date(combined);
   if (!isNaN(d.getTime())) return d.getTime();
   // MM/DD/YYYY HH:MM:SS
   const longYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(.*)$/);
-  if (longYr) return new Date(`${longYr[3]}-${longYr[1].padStart(2,'0')}-${longYr[2].padStart(2,'0')} ${longYr[4]}`).getTime();
+  if (longYr) return parseAsET(`${longYr[3]}-${longYr[1].padStart(2,'0')}-${longYr[2].padStart(2,'0')}T${longYr[4]}`);
   return 0;
 }
 
@@ -635,7 +670,7 @@ function parseTOSStatement(text) {
       const commission = Math.abs(cleanNum(miscFeesCol)) + Math.abs(cleanNum(commFeesCol));
       fills.push({
         broker: 'tos', timestamp: ts,
-        date: new Date(ts).toISOString().slice(0, 10),
+        date: fmtETDate(ts),
         symbol: `${sym} ${expDate} ${strike} ${optType.toUpperCase()}`,
         underlying: sym.toUpperCase(),
         expDate,
@@ -660,7 +695,7 @@ function parseTOSStatement(text) {
       const commission = Math.abs(cleanNum(miscFeesCol)) + Math.abs(cleanNum(commFeesCol));
       fills.push({
         broker: 'tos', timestamp: ts,
-        date: new Date(ts).toISOString().slice(0, 10),
+        date: fmtETDate(ts),
         symbol: sym.toUpperCase(),
         underlying: sym.toUpperCase(),
         expDate: null, strike: null, optType: null, isOption: false,
@@ -726,7 +761,7 @@ function parseTOS(text) {
         const isOption = !!(optInfo.expDate || optInfo.strike);
         fills.push({
           broker: 'tos', timestamp: ts,
-          date: new Date(ts).toISOString().slice(0,10),
+          date: fmtETDate(ts),
           symbol: sym,
           underlying: optInfo.underlying || sym,
           expDate: optInfo.expDate,
@@ -789,7 +824,7 @@ function parseIBKR(text) {
       const optInfo = isOption ? parseOptionSymbol(sym, '', '', '', '') : { underlying: sym, expDate: null, strike: null, optType: null };
       fills.push({
         broker: 'ibkr', timestamp: ts,
-        date: new Date(ts).toISOString().slice(0,10),
+        date: fmtETDate(ts),
         symbol: sym.trim(),
         underlying: optInfo.underlying || sym.trim(),
         expDate: optInfo.expDate,
@@ -873,8 +908,8 @@ function groupTrades(fills) {
     groups.push({
       id,
       date: first.date,
-      entryTime: new Date(first.timestamp).toISOString().slice(11,16),
-      exitTime: new Date(last.timestamp).toISOString().slice(11,16),
+      entryTime: fmtETTime(first.timestamp),
+      exitTime: fmtETTime(last.timestamp),
       durationMin: Math.round((last.timestamp - first.timestamp) / 60000),
       underlying: first.underlying,
       symbol: first.symbol,
@@ -991,7 +1026,7 @@ function buildScaleViz(g) {
       ? `<span class="${pnlClass(step.runningPnl)}" style="font-family:monospace;font-size:11px"> = ${fmt$(step.runningPnl)} net</span>`
       : '';
     return `<tr>
-      <td style="color:var(--text2);font-family:monospace;font-size:11px;white-space:nowrap">${new Date(f.timestamp).toISOString().slice(11,16)}</td>
+      <td style="color:var(--text2);font-family:monospace;font-size:11px;white-space:nowrap">${fmtETTime(f.timestamp)}</td>
       <td><span class="${f.side === 'BUY' ? 'side-buy' : 'side-sell'}" style="font-size:11px;font-weight:700">${f.side === 'BUY' ? '▲ BUY' : '▼ SELL'}</span></td>
       <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">${f.qty}</td>
       <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">$${f.price.toFixed(2)}</td>
