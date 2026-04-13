@@ -248,9 +248,20 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card format-guide">
         <div class="card-title">Thinkorswim Export</div>
-        <div class="format-step"><div class="step-num">1</div><div class="step-text">Open TOS → <strong>Monitor</strong> tab → <strong>Account Statement</strong></div></div>
-        <div class="format-step"><div class="step-num">2</div><div class="step-text">Set date range, click the <strong>gear ⚙️</strong> icon → ensure columns include Exec Time, Side, Qty, Symbol, Price, Commission, Net Amount</div></div>
-        <div class="format-step"><div class="step-num">3</div><div class="step-text">Right-click table → <strong>Export to file…</strong> → save as CSV</div></div>
+
+        <div style="font-size:11px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Option A — Today's Activity</div>
+        <div class="format-step"><div class="step-num">1</div><div class="step-text">In TOS, go to the <strong>Activity and Positions</strong> tab (top nav)</div></div>
+        <div class="format-step"><div class="step-num">2</div><div class="step-text">Click the <strong>export 📤</strong> icon (top-right of the page) → <strong>Export to file…</strong></div></div>
+        <div class="format-step"><div class="step-num">3</div><div class="step-text">Save as CSV — gives you today's filled orders only</div></div>
+
+        <div style="font-size:11px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 8px">Option B — Date Range History</div>
+        <div class="format-step"><div class="step-num">1</div><div class="step-text">Go to <strong>Monitor</strong> tab → <strong>Account Statement</strong></div></div>
+        <div class="format-step"><div class="step-num">2</div><div class="step-text">⚠️ Make sure <strong>one specific account</strong> is selected — NOT "All Accounts" — in the account dropdown at the top</div></div>
+        <div class="format-step"><div class="step-num">3</div><div class="step-text">Set your date range, then right-click anywhere in the table → <strong>Export to file…</strong> → save as CSV</div></div>
+
+        <div style="margin-top:12px;padding:8px 10px;background:rgba(227,179,65,.08);border:1px solid rgba(227,179,65,.25);border-radius:4px;font-size:11px;color:var(--yellow);line-height:1.6">
+          ⚠️ <strong>All Accounts exports will not import.</strong> Always select a single account before exporting, or use Option A for today's trades.
+        </div>
       </div>
 
       <div class="card format-guide">
@@ -524,39 +535,6 @@ function cleanNum(s) {
   return parseFloat(s) || 0;
 }
 
-// ── Eastern Time helpers ──────────────────────────────────────────────────
-function parseAsET(isoStr) {
-  // Interpret a naive "YYYY-MM-DDTHH:MM:SS" string as Eastern Time → UTC ms
-  const approx = new Date(isoStr + 'Z');
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-  });
-  const p = Object.fromEntries(fmt.formatToParts(approx).map(x => [x.type, x.value]));
-  const etUTC = new Date(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}Z`).getTime();
-  const offset = etUTC - approx.getTime();
-  return approx.getTime() - offset;
-}
-
-function fmtETTime(ts) {
-  // Format UTC timestamp as HH:MM in Eastern Time
-  return new Date(ts).toLocaleString('en-US', {
-    timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false
-  });
-}
-
-function fmtETDate(ts) {
-  // Format UTC timestamp as YYYY-MM-DD in Eastern Time
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
-      year: 'numeric', month: '2-digit', day: '2-digit'
-    }).formatToParts(new Date(ts)).map(x => [x.type, x.value])
-  );
-  return `${p.year}-${p.month}-${p.day}`;
-}
-
 function parseDateTime(dateStr, timeStr) {
   if (!dateStr) return 0;
   let combined = timeStr ? `${dateStr} ${timeStr}` : dateStr;
@@ -565,17 +543,15 @@ function parseDateTime(dateStr, timeStr) {
   const shortYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(.+)$/);
   if (shortYr) {
     const [, mo, dy, yy, rest] = shortYr;
-    const ts = parseAsET(`${2000+parseInt(yy)}-${mo.padStart(2,'0')}-${dy.padStart(2,'0')}T${rest}`);
+    const ts = new Date(`${2000+parseInt(yy)}-${mo.padStart(2,'0')}-${dy.padStart(2,'0')}T${rest}`).getTime();
     if (!isNaN(ts)) return ts;
   }
   // IBKR: "2024-01-15, 09:35:22"
-  const ibkr = combined.match(/^(\d{4}-\d{2}-\d{2})[,\s]+(\d{2}:\d{2}:\d{2})$/);
-  if (ibkr) { const ts = parseAsET(`${ibkr[1]}T${ibkr[2]}`); if (!isNaN(ts)) return ts; }
   const d = new Date(combined);
   if (!isNaN(d.getTime())) return d.getTime();
   // MM/DD/YYYY HH:MM:SS
   const longYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(.*)$/);
-  if (longYr) return parseAsET(`${longYr[3]}-${longYr[1].padStart(2,'0')}-${longYr[2].padStart(2,'0')}T${longYr[4]}`);
+  if (longYr) return new Date(`${longYr[3]}-${longYr[1].padStart(2,'0')}-${longYr[2].padStart(2,'0')} ${longYr[4]}`).getTime();
   return 0;
 }
 
@@ -624,90 +600,141 @@ function calcDTE(tradeTs, expDate) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  TOS ACCOUNT STATEMENT PARSER  (DATE,TIME,TYPE,REF#,DESCRIPTION…)
+//  TOS ACCOUNT STATEMENT PARSER  (handles two section formats)
+//
+//  Format A – Cash Balance section  (DATE,TIME,TYPE,REF#,DESCRIPTION…)
+//    TRD rows: 4/1/26,10:38:44,TRD,…,BOT +5 SPX 100 (Weeklys) 1 APR 26 6625 CALL @1.80,…
+//
+//  Format B – Account Trade History section  (,Exec Time,Spread,Side,Qty,…)
+//    Data rows: ,4/1/26 10:38:44,SINGLE,BUY TO OPEN,5,TO OPEN,.SPX260401C06625000,1 APR 26,6625,C,1.80,1.80,MKT
 // ═══════════════════════════════════════════════════════
 function parseTOSStatement(text) {
   const lines = text.split(/\r?\n/);
   const fills = [];
   const MONTHS = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
-  // Matches: BOT +5 SPX 100 (Weeklys) 1 APR 26 6625 CALL @1.80
-  //      or: BOT +4 SNDK 100 17 APR 26 800 CALL @18.20   (no spread label)
-  //      or: tIP SOLD -4 SPX 100 (Weeklys) 10 APR 26 6815 CALL @7.60
-  const re = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+([A-Z\/\.]+)\s+100\s*(?:\([^)]+\)\s+)?(\d{1,2})\s+([A-Z]{3})\s+(\d{2})\s+([\d.]+)\s+(CALL|PUT)\s+@([\d.]+)/i;
-  // Also handle stock / non-option rows like: BOT +100 AAPL @185.20
+
+  // ── Guard: ALL ACCOUNTS summary has no transaction rows ──
+  if (text.includes('(ALL ACCOUNTS)') || text.includes('<TOTAL>')) {
+    const dr = text.match(/since (.+?) through (.+)/i);
+    const range = dr ? ` (date range in this file: ${dr[1].trim()} → ${dr[2].trim()})` : '';
+    throw new Error(
+      `"All Accounts" summary export detected${range} — no transaction history is included.\n` +
+      `Fix: In TOS go to Monitor → Account Statement, select your individual account ` +
+      `(not "All Accounts"), set the date range to include today, then export.`
+    );
+  }
+
+  // ── Format A regex: BOT/SOLD description lines ──
+  const descRe = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+([A-Z\/\.]+)\s+100\s*(?:\([^)]+\)\s+)?(\d{1,2})\s+([A-Z]{3})\s+(\d{2})\s+([\d.]+)\s+(CALL|PUT)\s+@([\d.]+)/i;
   const stockRe = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+([A-Z\/\.]+)\s+@([\d.]+)$/i;
 
-  // Only parse rows where TYPE = TRD and the section is Cash Balance (equity options)
-  // Skip Futures and Forex sections
-  let inCashSection = true;
+  let inCashSection = false;
+  let inTradeHistory = false;
+  let tradeHistHeaders = null;
+
   for (const line of lines) {
     const raw = line.trim();
     if (!raw) continue;
-    // Detect section boundaries
-    if (/^Futures Statements/i.test(raw) || /^Forex Statements/i.test(raw)) { inCashSection = false; }
-    if (/^Cash Balance/i.test(raw)) { inCashSection = true; }
-    if (!inCashSection) continue;
 
-    const cols = parseCSVLine(raw);
-    if (cols.length < 7) continue;
-    // Support both 8-col (Cash) and padded variants
-    // DATE, TIME, TYPE, REF #, DESCRIPTION, Misc Fees, Comm & Fees, AMOUNT, BALANCE
-    const [dateCol, timeCol, typeCol, , descCol, miscFeesCol, commFeesCol, amountCol] = cols;
-    if (typeCol !== 'TRD') continue;
-
-    // Strip known prefixes like "tIP" but NOT "BOT" or "SOLD"
-    const desc = descCol.replace(/^(?!BOT\b|SOLD\b)[A-Za-z]+\s+/, '').trim();
-
-    const m = desc.match(re);
-    if (m) {
-      const [, action, qtyStr, sym, day, mon, yr, strike, optType, priceStr] = m;
-      const expYear = 2000 + parseInt(yr);
-      const expMonth = MONTHS[mon.toUpperCase()];
-      const expDay = parseInt(day);
-      const expDate = new Date(expYear, expMonth, expDay).toISOString().slice(0, 10);
-      const ts = parseDateTime(dateCol, timeCol);
-      if (!ts) continue;
-      const commission = Math.abs(cleanNum(miscFeesCol)) + Math.abs(cleanNum(commFeesCol));
-      fills.push({
-        broker: 'tos', timestamp: ts,
-        date: fmtETDate(ts),
-        symbol: `${sym} ${expDate} ${strike} ${optType.toUpperCase()}`,
-        underlying: sym.toUpperCase(),
-        expDate,
-        strike: parseFloat(strike),
-        optType: optType.toUpperCase(),
-        isOption: true,
-        side: action.toUpperCase() === 'BOT' ? 'BUY' : 'SELL',
-        qty: parseInt(qtyStr),
-        price: parseFloat(priceStr),
-        commission,
-        netAmount: cleanNum(amountCol),
-        spread: '',
-      });
-      continue;
+    // ── Section boundary detection ──
+    if (/^Cash Balance$/i.test(raw))            { inCashSection = true;  inTradeHistory = false; tradeHistHeaders = null; continue; }
+    if (/^Account Trade History$/i.test(raw))   { inTradeHistory = true; inCashSection = false;  tradeHistHeaders = null; continue; }
+    if (/^(Futures Statements|Forex|Options$|Profits and Losses|Account Order History|Account Summary|Crypto)/i.test(raw)) {
+      inCashSection = false; inTradeHistory = false; continue;
     }
-    // Fallback: plain stock trade
-    const sm = desc.match(stockRe);
-    if (sm) {
-      const [, action, qtyStr, sym, priceStr] = sm;
-      const ts = parseDateTime(dateCol, timeCol);
+
+    // ══ FORMAT A: Cash Balance TRD rows with BOT/SOLD descriptions ══
+    if (inCashSection) {
+      const cols = parseCSVLine(raw);
+      if (cols.length < 7) continue;
+      const [dateCol, timeCol, typeCol, , descCol, miscFeesCol, commFeesCol, amountCol] = cols;
+      if (typeCol !== 'TRD') continue;
+      const desc = descCol.replace(/^(?!BOT\b|SOLD\b)[A-Za-z]+\s+/, '').trim();
+      const m = desc.match(descRe);
+      if (m) {
+        const [, action, qtyStr, sym, day, mon, yr, strike, optType, priceStr] = m;
+        const expDate = new Date(2000+parseInt(yr), MONTHS[mon.toUpperCase()], parseInt(day)).toISOString().slice(0,10);
+        const ts = parseDateTime(dateCol, timeCol);
+        if (!ts) continue;
+        fills.push({
+          broker:'tos', timestamp:ts, date:new Date(ts).toISOString().slice(0,10),
+          symbol:`${sym} ${expDate} ${strike} ${optType.toUpperCase()}`,
+          underlying:sym.toUpperCase(), expDate, strike:parseFloat(strike),
+          optType:optType.toUpperCase(), isOption:true,
+          side:action.toUpperCase()==='BOT'?'BUY':'SELL', qty:parseInt(qtyStr),
+          price:parseFloat(priceStr),
+          commission:Math.abs(cleanNum(miscFeesCol))+Math.abs(cleanNum(commFeesCol)),
+          netAmount:cleanNum(amountCol), spread:'',
+        });
+        continue;
+      }
+      const sm = desc.match(stockRe);
+      if (sm) {
+        const [, action, qtyStr, sym, priceStr] = sm;
+        const ts = parseDateTime(dateCol, timeCol);
+        if (!ts) continue;
+        fills.push({
+          broker:'tos', timestamp:ts, date:new Date(ts).toISOString().slice(0,10),
+          symbol:sym.toUpperCase(), underlying:sym.toUpperCase(),
+          expDate:null, strike:null, optType:null, isOption:false,
+          side:action.toUpperCase()==='BOT'?'BUY':'SELL', qty:parseInt(qtyStr),
+          price:parseFloat(priceStr),
+          commission:Math.abs(cleanNum(miscFeesCol))+Math.abs(cleanNum(commFeesCol)),
+          netAmount:cleanNum(amountCol), spread:'',
+        });
+      }
+    }
+
+    // ══ FORMAT B: Account Trade History section with separate columns ══
+    if (inTradeHistory) {
+      const cols = parseCSVLine(raw);
+      const lower = cols.map(c => c.toLowerCase().trim());
+      // Detect header — first col empty, second col 'exec time' (leading-comma format)
+      if (!tradeHistHeaders && (lower[0] === 'exec time' || lower[1] === 'exec time')) {
+        tradeHistHeaders = lower;
+        continue;
+      }
+      if (!tradeHistHeaders) continue;
+      const get = k => { const i = tradeHistHeaders.indexOf(k); return i >= 0 ? (cols[i]||'').trim() : ''; };
+      // Exec Time: "4/13/26 09:35:22" or "4/13/26 09:35:22 ET"
+      const rawExec = get('exec time').replace(/\s*ET$/i,'').trim();
+      if (!rawExec || lower[tradeHistHeaders.indexOf('exec time')] === 'exec time') continue;
+      if (!/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(rawExec)) continue; // must have date
+      const ts = parseDateTime(rawExec);
       if (!ts) continue;
-      const commission = Math.abs(cleanNum(miscFeesCol)) + Math.abs(cleanNum(commFeesCol));
+      const sideRaw = get('side').toUpperCase();
+      const side = sideRaw.startsWith('B') ? 'BUY' : 'SELL';
+      const qty = Math.abs(cleanNum(get('qty')));
+      if (!qty) continue;
+      const price = Math.abs(cleanNum(get('price') || get('net price')));
+      const sym = get('symbol');
+      const exp = get('exp');
+      const strike = get('strike');
+      const optTypeRaw = get('type');
+      const comm = Math.abs(cleanNum(get('commissions & fees') || get('commission') || '0'));
+      const optInfo = parseOptionSymbol(sym, exp, strike, optTypeRaw, '');
+      const isOption = !!(optInfo.expDate || optInfo.strike);
       fills.push({
-        broker: 'tos', timestamp: ts,
-        date: fmtETDate(ts),
-        symbol: sym.toUpperCase(),
-        underlying: sym.toUpperCase(),
-        expDate: null, strike: null, optType: null, isOption: false,
-        side: action.toUpperCase() === 'BOT' ? 'BUY' : 'SELL',
-        qty: parseInt(qtyStr),
-        price: parseFloat(priceStr),
-        commission,
-        netAmount: cleanNum(amountCol),
-        spread: '',
+        broker:'tos', timestamp:ts, date:new Date(ts).toISOString().slice(0,10),
+        symbol:sym, underlying:optInfo.underlying||sym,
+        expDate:optInfo.expDate, strike:optInfo.strike,
+        optType:optInfo.optType, isOption, side, qty, price,
+        commission:comm, netAmount:0, spread:get('spread')||'',
       });
     }
   }
+
+  // ── Warn clearly if file parsed fine but had no tradeable rows ──
+  if (fills.length === 0) {
+    const dr = text.match(/since (.+?) through (.+)/i);
+    const range = dr ? ` Date range in this file: ${dr[1].trim()} → ${dr[2].trim()}.` : '';
+    throw new Error(
+      `No transactions found in this file.${range}\n` +
+      `Check that you exported from a specific account (not "All Accounts") ` +
+      `and that the date range includes the days you traded.`
+    );
+  }
+
   return fills;
 }
 
@@ -718,10 +745,33 @@ function parseTOS(text) {
   const lines = text.split(/\r?\n/);
   let headers = null;
   const fills = [];
+
+  // Detect whether this is a section-based "Today's Trade Activity" export.
+  // Those files have explicit section headers like "Filled Orders", "Canceled Orders", etc.
+  const hasSections = /^(Filled Orders|Working Orders|Canceled Orders|Rolling Strategies)/m.test(text);
+
+  // When section-based, we only want rows that fall inside "Filled Orders".
+  let inFilledOrders = false;
+
   // Find header row
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
+
+    // Section header tracking (only matters for section-based files)
+    if (hasSections) {
+      const sectionMatch = line.match(/^(Filled Orders|Working Orders|Canceled Orders|Rolling Strategies)/i);
+      if (sectionMatch) {
+        inFilledOrders = /^Filled Orders/i.test(sectionMatch[0]);
+        // Reset headers so we re-detect them inside each section if needed
+        // (but we only process Filled Orders, so just continue)
+        headers = null;
+        continue;
+      }
+      // Skip rows that are outside the Filled Orders section
+      if (!inFilledOrders) continue;
+    }
+
     const cells = parseCSVLine(line);
     const lower = cells.map(c => c.toLowerCase());
     if (lower.some(c => c.includes('exec time') || c === 'side' || c.includes('exec date'))) {
@@ -730,6 +780,10 @@ function parseTOS(text) {
       for (let j = i + 1; j < lines.length; j++) {
         const row = lines[j].trim();
         if (!row) continue;
+
+        // In section-based files, stop at the next section header
+        if (hasSections && /^(Filled Orders|Working Orders|Canceled Orders|Rolling Strategies)/i.test(row)) break;
+
         const cols = parseCSVLine(row);
         if (cols.length < 4) continue;
         const get = k => {
@@ -743,7 +797,11 @@ function parseTOS(text) {
         if (!['BUY','SELL','BTO','STO','BTC','STC'].some(s => side.startsWith(s))) continue;
         const qty = Math.abs(cleanNum(get('qty') || get('quantity')));
         if (!qty) continue;
-        const price = cleanNum(get('price') || get('net price') || get('avg price'));
+        const priceRaw = get('price') || get('net price') || get('avg price');
+        // Skip rows with no real price (e.g. canceled orders with '~')
+        if (!priceRaw || priceRaw === '~') continue;
+        const price = cleanNum(priceRaw);
+        if (!price) continue;
         const commission = cleanNum(get('commission') || get('comm'));
         const regFees = cleanNum(get('reg fees') || get('reg fee'));
         const netAmount = cleanNum(get('net amount') || get('proceeds'));
@@ -761,7 +819,7 @@ function parseTOS(text) {
         const isOption = !!(optInfo.expDate || optInfo.strike);
         fills.push({
           broker: 'tos', timestamp: ts,
-          date: fmtETDate(ts),
+          date: new Date(ts).toISOString().slice(0,10),
           symbol: sym,
           underlying: optInfo.underlying || sym,
           expDate: optInfo.expDate,
@@ -824,7 +882,7 @@ function parseIBKR(text) {
       const optInfo = isOption ? parseOptionSymbol(sym, '', '', '', '') : { underlying: sym, expDate: null, strike: null, optType: null };
       fills.push({
         broker: 'ibkr', timestamp: ts,
-        date: fmtETDate(ts),
+        date: new Date(ts).toISOString().slice(0,10),
         symbol: sym.trim(),
         underlying: optInfo.underlying || sym.trim(),
         expDate: optInfo.expDate,
@@ -908,8 +966,8 @@ function groupTrades(fills) {
     groups.push({
       id,
       date: first.date,
-      entryTime: fmtETTime(first.timestamp),
-      exitTime: fmtETTime(last.timestamp),
+      entryTime: new Date(first.timestamp).toISOString().slice(11,16),
+      exitTime: new Date(last.timestamp).toISOString().slice(11,16),
       durationMin: Math.round((last.timestamp - first.timestamp) / 60000),
       underlying: first.underlying,
       symbol: first.symbol,
@@ -1026,7 +1084,7 @@ function buildScaleViz(g) {
       ? `<span class="${pnlClass(step.runningPnl)}" style="font-family:monospace;font-size:11px"> = ${fmt$(step.runningPnl)} net</span>`
       : '';
     return `<tr>
-      <td style="color:var(--text2);font-family:monospace;font-size:11px;white-space:nowrap">${fmtETTime(f.timestamp)}</td>
+      <td style="color:var(--text2);font-family:monospace;font-size:11px;white-space:nowrap">${new Date(f.timestamp).toISOString().slice(11,16)}</td>
       <td><span class="${f.side === 'BUY' ? 'side-buy' : 'side-sell'}" style="font-size:11px;font-weight:700">${f.side === 'BUY' ? '▲ BUY' : '▼ SELL'}</span></td>
       <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">${f.qty}</td>
       <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">$${f.price.toFixed(2)}</td>
