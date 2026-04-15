@@ -535,23 +535,68 @@ function cleanNum(s) {
   return parseFloat(s) || 0;
 }
 
+// ── Timezone helpers ─────────────────────────────────────
+// All broker timestamps are Eastern Time (ET). We always parse
+// and display in America/New_York so the journal is correct
+// regardless of what timezone the user's machine is set to.
+
+function getETOffset(isoDateStr) {
+  // Return the UTC offset string ("-04:00" EDT or "-05:00" EST)
+  // for the given date in America/New_York.
+  try {
+    const probe = new Date(isoDateStr + 'T12:00:00Z');
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', timeZoneName: 'short'
+    }).formatToParts(probe);
+    const tz = (parts.find(p => p.type === 'timeZoneName') || {}).value || '';
+    return tz === 'EDT' ? '-04:00' : '-05:00';
+  } catch(e) { return '-04:00'; }
+}
+
+function fmtTimeET(ts) {
+  // HH:MM in Eastern Time
+  return new Date(ts).toLocaleTimeString('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+}
+
+function fmtDateET(ts) {
+  // YYYY-MM-DD in Eastern Time
+  return new Date(ts).toLocaleDateString('en-CA', {
+    timeZone: 'America/New_York'
+  });
+}
+// ─────────────────────────────────────────────────────────
+
 function parseDateTime(dateStr, timeStr) {
   if (!dateStr) return 0;
   let combined = timeStr ? `${dateStr} ${timeStr}` : dateStr;
   combined = combined.replace(';', ' ').trim();
-  // TOS Account Statement: M/D/YY HH:MM:SS  (e.g. "4/1/26 10:38:44")
+  // TOS: M/D/YY HH:MM:SS — times are Eastern, append explicit ET offset
   const shortYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(.+)$/);
   if (shortYr) {
     const [, mo, dy, yy, rest] = shortYr;
-    const ts = new Date(`${2000+parseInt(yy)}-${mo.padStart(2,'0')}-${dy.padStart(2,'0')}T${rest}`).getTime();
+    const isoDate = `${2000+parseInt(yy)}-${mo.padStart(2,'0')}-${dy.padStart(2,'0')}`;
+    const ts = new Date(`${isoDate}T${rest}${getETOffset(isoDate)}`).getTime();
     if (!isNaN(ts)) return ts;
   }
-  // IBKR: "2024-01-15, 09:35:22"
+  // IBKR: "2024-01-15, 09:35:22" — also Eastern; append ET offset
+  const ibrk = combined.match(/^(\d{4}-\d{2}-\d{2})[,\s]+(\d{2}:\d{2}:\d{2})$/);
+  if (ibrk) {
+    const ts = new Date(`${ibrk[1]}T${ibrk[2]}${getETOffset(ibrk[1])}`).getTime();
+    if (!isNaN(ts)) return ts;
+  }
+  // Generic ISO / other formats — treat as ET
   const d = new Date(combined);
   if (!isNaN(d.getTime())) return d.getTime();
   // MM/DD/YYYY HH:MM:SS
   const longYr = combined.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(.*)$/);
-  if (longYr) return new Date(`${longYr[3]}-${longYr[1].padStart(2,'0')}-${longYr[2].padStart(2,'0')} ${longYr[4]}`).getTime();
+  if (longYr) {
+    const isoDate = `${longYr[3]}-${longYr[1].padStart(2,'0')}-${longYr[2].padStart(2,'0')}`;
+    const ts = new Date(`${isoDate}T${longYr[4]}${getETOffset(isoDate)}`).getTime();
+    if (!isNaN(ts)) return ts;
+  }
   return 0;
 }
 
@@ -657,7 +702,7 @@ function parseTOSStatement(text) {
         const ts = parseDateTime(dateCol, timeCol);
         if (!ts) continue;
         fills.push({
-          broker:'tos', timestamp:ts, date:new Date(ts).toISOString().slice(0,10),
+          broker:'tos', timestamp:ts, date:fmtDateET(ts),
           symbol:`${sym} ${expDate} ${strike} ${optType.toUpperCase()}`,
           underlying:sym.toUpperCase(), expDate, strike:parseFloat(strike),
           optType:optType.toUpperCase(), isOption:true,
@@ -674,7 +719,7 @@ function parseTOSStatement(text) {
         const ts = parseDateTime(dateCol, timeCol);
         if (!ts) continue;
         fills.push({
-          broker:'tos', timestamp:ts, date:new Date(ts).toISOString().slice(0,10),
+          broker:'tos', timestamp:ts, date:fmtDateET(ts),
           symbol:sym.toUpperCase(), underlying:sym.toUpperCase(),
           expDate:null, strike:null, optType:null, isOption:false,
           side:action.toUpperCase()==='BOT'?'BUY':'SELL', qty:parseInt(qtyStr),
@@ -715,7 +760,7 @@ function parseTOSStatement(text) {
       const optInfo = parseOptionSymbol(sym, exp, strike, optTypeRaw, '');
       const isOption = !!(optInfo.expDate || optInfo.strike);
       fills.push({
-        broker:'tos', timestamp:ts, date:new Date(ts).toISOString().slice(0,10),
+        broker:'tos', timestamp:ts, date:fmtDateET(ts),
         symbol:sym, underlying:optInfo.underlying||sym,
         expDate:optInfo.expDate, strike:optInfo.strike,
         optType:optInfo.optType, isOption, side, qty, price,
@@ -819,7 +864,7 @@ function parseTOS(text) {
         const isOption = !!(optInfo.expDate || optInfo.strike);
         fills.push({
           broker: 'tos', timestamp: ts,
-          date: new Date(ts).toISOString().slice(0,10),
+          date: fmtDateET(ts),
           symbol: sym,
           underlying: optInfo.underlying || sym,
           expDate: optInfo.expDate,
@@ -882,7 +927,7 @@ function parseIBKR(text) {
       const optInfo = isOption ? parseOptionSymbol(sym, '', '', '', '') : { underlying: sym, expDate: null, strike: null, optType: null };
       fills.push({
         broker: 'ibkr', timestamp: ts,
-        date: new Date(ts).toISOString().slice(0,10),
+        date: fmtDateET(ts),
         symbol: sym.trim(),
         underlying: optInfo.underlying || sym.trim(),
         expDate: optInfo.expDate,
@@ -918,80 +963,98 @@ function parseIBKR(text) {
 //  TRADE GROUPING
 // ═══════════════════════════════════════════════════════
 function groupTrades(fills) {
-  // Group fills by underlying symbol + calendar date
-  const map = new Map();
+  // Group fills by instrument identity only (no date) so swing trades stay together
+  const instMap = new Map();
   fills.forEach(f => {
-    const key = `${f.underlying}|${f.date}|${f.expDate || ''}|${f.strike || ''}|${f.optType || ''}`;
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(f);
+    const key = `${f.underlying}|${f.expDate || ''}|${f.strike || ''}|${f.optType || ''}`;
+    if (!instMap.has(key)) instMap.set(key, []);
+    instMap.get(key).push(f);
   });
 
   const groups = [];
-  map.forEach((group_fills, key) => {
-    group_fills.sort((a, b) => a.timestamp - b.timestamp);
-    const first = group_fills[0];
-    const last = group_fills[group_fills.length - 1];
-    // Calculate P&L using FIFO matching
-    const buys = [], sells = [];
-    let totalCommission = 0;
-    group_fills.forEach(f => {
-      totalCommission += f.commission || 0;
-      if (f.side === 'BUY') buys.push({qty: f.qty, price: f.price});
-      else sells.push({qty: f.qty, price: f.price});
+
+  instMap.forEach((inst_fills) => {
+    inst_fills.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Walk fills with position tracking; split into discrete trades each time
+    // the position returns to zero (handles re-entries on same instrument).
+    let pos = 0;
+    let batch = [];
+
+    const flushBatch = () => {
+      if (!batch.length) return;
+      const trade_fills = batch.slice();
+      batch = [];
+
+      const first = trade_fills[0];
+      const last  = trade_fills[trade_fills.length - 1];
+      const openDate  = first.date;
+      const closeDate = last.date;
+      const isSwing   = openDate !== closeDate;
+
+      const buys = [], sells = [];
+      let totalCommission = 0;
+      trade_fills.forEach(f => {
+        totalCommission += f.commission || 0;
+        if (f.side === 'BUY') buys.push({qty: f.qty, price: f.price});
+        else sells.push({qty: f.qty, price: f.price});
+      });
+      const totalBuyQty  = buys.reduce((s,b) => s+b.qty, 0);
+      const totalSellQty = sells.reduce((s,s2) => s+s2.qty, 0);
+      const avgBuy  = buys.length  ? buys.reduce((s,b)   => s+b.price*b.qty,   0) / totalBuyQty  : 0;
+      const avgSell = sells.length ? sells.reduce((s,s2) => s+s2.price*s2.qty, 0) / totalSellQty : 0;
+      const netPos     = totalBuyQty - totalSellQty;
+      const closedQty  = Math.min(totalBuyQty, totalSellQty);
+      const mult       = first.isOption ? MULTIPLIER : 1;
+      let grossPnl = 0;
+      if (closedQty > 0) grossPnl = (avgSell - avgBuy) * closedQty * mult;
+      const netPnl = grossPnl - totalCommission;
+      const isOpen = Math.abs(netPos) > 0.001;
+      const totalCostBasis = buys.reduce((s,b) => s + b.price * b.qty * mult, 0);
+      const rrPct = totalCostBasis > 0 && !isOpen ? (netPnl / totalCostBasis) * 100 : null;
+      const dte   = calcDTE(first.timestamp, first.expDate);
+      const id    = `${first.underlying}|${openDate}|${first.expDate||''}|${first.strike||''}|${first.optType||''}|${first.timestamp}`;
+
+      groups.push({
+        id,
+        date: openDate,           // always the open date
+        closeDate: isSwing ? closeDate : openDate,  // close date (same as open for day trades)
+        isSwing,
+        entryTime: fmtTimeET(first.timestamp),
+        exitTime:  fmtTimeET(last.timestamp),
+        durationMin: Math.round((last.timestamp - first.timestamp) / 60000),
+        underlying: first.underlying,
+        symbol:     first.symbol,
+        expDate:    first.expDate,
+        strike:     first.strike,
+        optType:    first.optType,
+        isOption:   first.isOption,
+        broker:     first.broker,
+        fills:      trade_fills,
+        totalBuyQty,
+        totalSellQty,
+        avgBuy,
+        avgSell,
+        netPos,
+        isOpen,
+        closedQty,
+        grossPnl,
+        totalCommission,
+        netPnl: isOpen ? null : netPnl,
+        rrPct,
+        totalCostBasis,
+        dte,
+      });
+    };
+
+    inst_fills.forEach(f => {
+      batch.push(f);
+      pos += f.side === 'BUY' ? f.qty : -f.qty;
+      if (Math.abs(pos) < 0.001) { flushBatch(); pos = 0; }
     });
-    const totalBuyQty = buys.reduce((s,b) => s+b.qty, 0);
-    const totalSellQty = sells.reduce((s,s2) => s+s2.qty, 0);
-    const avgBuy = buys.length ? buys.reduce((s,b) => s+b.price*b.qty, 0) / totalBuyQty : 0;
-    const avgSell = sells.length ? sells.reduce((s,s2) => s+s2.price*s2.qty, 0) / totalSellQty : 0;
-    const netPos = totalBuyQty - totalSellQty;
-    const closedQty = Math.min(totalBuyQty, totalSellQty);
-    const mult = first.isOption ? MULTIPLIER : 1;
-    // Gross P&L on closed portion
-    let grossPnl = 0;
-    if (closedQty > 0) {
-      // Direction: net long entry (more buys first), or net short
-      if (totalBuyQty >= totalSellQty) {
-        grossPnl = (avgSell - avgBuy) * closedQty * mult;
-      } else {
-        grossPnl = (avgSell - avgBuy) * closedQty * mult;
-      }
-    }
-    // Add unrealized for open positions (show as 0 P&L marked with open tag)
-    const netPnl = grossPnl - totalCommission;
-    const isOpen = Math.abs(netPos) > 0.001;
-    const totalCostBasis = buys.reduce((s, b) => s + b.price * b.qty * mult, 0);
-    const rrPct = totalCostBasis > 0 && !isOpen ? (netPnl / totalCostBasis) * 100 : null;
-    const dte = calcDTE(first.timestamp, first.expDate);
-    const id = key + '|' + first.timestamp;
-    groups.push({
-      id,
-      date: first.date,
-      entryTime: new Date(first.timestamp).toISOString().slice(11,16),
-      exitTime: new Date(last.timestamp).toISOString().slice(11,16),
-      durationMin: Math.round((last.timestamp - first.timestamp) / 60000),
-      underlying: first.underlying,
-      symbol: first.symbol,
-      expDate: first.expDate,
-      strike: first.strike,
-      optType: first.optType,
-      isOption: first.isOption,
-      broker: first.broker,
-      fills: group_fills,
-      totalBuyQty,
-      totalSellQty,
-      avgBuy,
-      avgSell,
-      netPos,
-      isOpen,
-      closedQty,
-      grossPnl,
-      totalCommission,
-      netPnl: isOpen ? null : netPnl,
-      rrPct,
-      totalCostBasis,
-      dte,
-    });
+    flushBatch(); // any remaining open position
   });
+
   groups.sort((a,b) => new Date(b.date) - new Date(a.date) || b.entryTime.localeCompare(a.entryTime));
   return groups;
 }
@@ -1084,7 +1147,7 @@ function buildScaleViz(g) {
       ? `<span class="${pnlClass(step.runningPnl)}" style="font-family:monospace;font-size:11px"> = ${fmt$(step.runningPnl)} net</span>`
       : '';
     return `<tr>
-      <td style="color:var(--text2);font-family:monospace;font-size:11px;white-space:nowrap">${new Date(f.timestamp).toISOString().slice(11,16)}</td>
+      <td style="color:var(--text2);font-family:monospace;font-size:11px;white-space:nowrap">${fmtTimeET(f.timestamp)}</td>
       <td><span class="${f.side === 'BUY' ? 'side-buy' : 'side-sell'}" style="font-size:11px;font-weight:700">${f.side === 'BUY' ? '▲ BUY' : '▼ SELL'}</span></td>
       <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">${f.qty}</td>
       <td style="font-family:monospace;font-size:12px;text-align:right;padding-right:12px">$${f.price.toFixed(2)}</td>
@@ -1205,8 +1268,8 @@ function renderLog() {
     html += `
     <tr class="trade-row">
       <td><button class="trade-expand-btn" onclick="toggleFills('fills-${idx}', this)">▶</button></td>
-      <td>${g.date}</td>
-      <td style="font-family:monospace;font-size:11px;color:var(--text2)">${g.entryTime}–${g.exitTime}</td>
+      <td>${g.isSwing ? `<div>${g.date}</div><div style="font-size:10px;color:var(--text2)">→ ${g.closeDate}</div>` : g.date}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--text2)">${g.entryTime}–${g.exitTime}${g.isSwing ? '<br><span style="color:var(--purple);font-size:10px">SWING</span>' : ''}</td>
       <td><span class="ticker-badge">${g.underlying}</span>${optDetail}</td>
       <td>${typeTag}</td>
       <td class="num">${g.totalBuyQty || '—'}</td>
@@ -1322,11 +1385,12 @@ function buildCharts(closed) {
   // Destroy existing
   Object.values(charts).forEach(c => { try { c.destroy(); } catch(e){} });
   charts = {};
-  const sorted = closed.slice().sort((a,b) => a.date.localeCompare(b.date) || a.entryTime.localeCompare(b.entryTime));
+  // Sort by close date/time (swing trades realized on close date)
+  const sorted = closed.slice().sort((a,b) => (a.closeDate||a.date).localeCompare(b.closeDate||b.date) || a.exitTime.localeCompare(b.exitTime));
 
   // Equity curve
   let running = 0;
-  const eqLabels = sorted.map(g => g.date);
+  const eqLabels = sorted.map(g => g.closeDate || g.date);
   const eqData = sorted.map(g => { running += g.netPnl; return running; });
   charts.equity = new Chart(document.getElementById('equityChart'), {
     type: 'line', data: {
@@ -1367,7 +1431,8 @@ function buildCharts(closed) {
   // Day of week
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dowMap = Array(7).fill(0);
-  closed.forEach(g => { const d = new Date(g.date + 'T12:00:00').getDay(); dowMap[d] += g.netPnl; });
+  // Use close date for P&L bucketing (when trade was realized)
+  closed.forEach(g => { const d = new Date((g.closeDate || g.date) + 'T12:00:00').getDay(); dowMap[d] += g.netPnl; });
   charts.dow = new Chart(document.getElementById('dowChart'), {
     type: 'bar', data: {
       labels: days,
@@ -1427,7 +1492,7 @@ function buildCharts(closed) {
 
   // Monthly P&L
   const monthMap = {};
-  closed.forEach(g => { const m = g.date.slice(0,7); monthMap[m] = (monthMap[m]||0) + g.netPnl; });
+  closed.forEach(g => { const m = (g.closeDate || g.date).slice(0,7); monthMap[m] = (monthMap[m]||0) + g.netPnl; });
   const months = Object.keys(monthMap).sort();
   charts.monthly = new Chart(document.getElementById('monthlyChart'), {
     type: 'bar', data: {
@@ -1468,13 +1533,15 @@ function buildCalendar() {
   document.getElementById('cal-month-label').textContent = `${monthNames[calMonth]} ${calYear}`;
 
   // Build day → P&L map
+  // For swing trades, P&L is counted on the close date (when realized)
   const dayMap = {};
   tradeGroups.filter(g => g.netPnl !== null).forEach(g => {
-    const [y, m] = g.date.split('-').map(Number);
+    const calDate = g.closeDate || g.date; // use close date for P&L placement
+    const [y, m] = calDate.split('-').map(Number);
     if (y === calYear && m-1 === calMonth) {
-      if (!dayMap[g.date]) dayMap[g.date] = { pnl: 0, trades: [] };
-      dayMap[g.date].pnl += g.netPnl;
-      dayMap[g.date].trades.push(g);
+      if (!dayMap[calDate]) dayMap[calDate] = { pnl: 0, trades: [] };
+      dayMap[calDate].pnl += g.netPnl;
+      dayMap[calDate].trades.push(g);
     }
   });
 
@@ -1492,7 +1559,7 @@ function buildCalendar() {
   // Cells
   const firstDay = new Date(calYear, calMonth, 1).getDay();
   const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = fmtDateET(Date.now());
   let cells = '';
   // Empty cells before first day
   for (let i = 0; i < firstDay; i++) cells += `<div class="cal-cell empty"></div>`;
@@ -1521,7 +1588,8 @@ function showDayDetail(dateStr) {
       if (dayNum === d) el.classList.add('selected');
     }
   });
-  const dayGroups = tradeGroups.filter(g => g.date === dateStr);
+  // Show trades opened OR closed on this day (swing trades appear on both days)
+  const dayGroups = tradeGroups.filter(g => g.date === dateStr || g.closeDate === dateStr);
   const dayEl = document.getElementById('cal-detail-body');
   if (!dayGroups.length) {
     dayEl.innerHTML = `<div class="text-muted">No trades on ${dateStr}</div>`;
