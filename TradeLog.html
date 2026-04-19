@@ -196,6 +196,37 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
 .items-center { align-items: center; }
 .gap8 { gap: 8px; }
 .gap4 { gap: 4px; }
+/* ── AI COACH TAB ── */
+.coach-header { margin-bottom: 14px; }
+.coach-timeframe-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.tf-btn { background: var(--bg2); border: 1px solid var(--border); color: var(--text); cursor: pointer; padding: 6px 14px; border-radius: var(--radius); font-size: 12px; font-weight: 500; transition: all .15s; }
+.tf-btn:hover { background: var(--bg3); border-color: var(--blue); }
+.tf-btn.active { background: rgba(88,166,255,.12); border-color: var(--blue); color: var(--blue); }
+.coach-context-strip { padding: 10px 14px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; align-items: center; }
+.coach-context-strip .ctx-item { color: var(--text2); }
+.coach-context-strip .ctx-item strong { color: var(--text); font-family: 'SF Mono', monospace; }
+.coach-chat-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; min-height: 520px; }
+.coach-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; }
+.coach-msg { display: flex; max-width: 80%; }
+.coach-msg.user { align-self: flex-end; justify-content: flex-end; }
+.coach-msg.assistant, .coach-msg.system { align-self: flex-start; }
+.coach-bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word; }
+.coach-msg.user .coach-bubble { background: var(--blue); color: #0d1117; border-bottom-right-radius: 4px; }
+.coach-msg.assistant .coach-bubble { background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.coach-msg.system .coach-bubble { background: rgba(248,81,73,.08); color: var(--red); border: 1px solid rgba(248,81,73,.3); font-size: 12px; }
+.coach-typing { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
+.coach-typing span { width: 6px; height: 6px; background: var(--text2); border-radius: 50%; animation: coach-bounce 1.2s infinite; }
+.coach-typing span:nth-child(2) { animation-delay: .15s; }
+.coach-typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes coach-bounce { 0%,60%,100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-4px); opacity: 1; } }
+.coach-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: var(--bg2); align-items: flex-end; }
+.coach-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 8px 12px; font-size: 13px; resize: vertical; max-height: 160px; outline: none; font-family: inherit; line-height: 1.5; }
+.coach-input:focus { border-color: var(--blue); }
+.coach-input:disabled { opacity: .6; cursor: not-allowed; }
+.coach-input-row .btn:disabled { opacity: .5; cursor: not-allowed; }
+.key-ok { color: var(--green); }
+.key-missing { color: var(--yellow); }
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg2); }
 ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
@@ -212,6 +243,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
     <button class="nav-tab" onclick="showTab('log')">Trade Log</button>
     <button class="nav-tab" onclick="showTab('dashboard')">Dashboard</button>
     <button class="nav-tab" onclick="showTab('calendar')">Calendar</button>
+    <button class="nav-tab" onclick="showTab('coach')">AI Coach</button>
   </div>
   <div class="nav-right">
     <span class="trade-count" id="nav-trade-count">0 trades</span>
@@ -369,6 +401,55 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
   </div>
 </div>
 
+<!-- API KEY MODAL -->
+<div id="api-key-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">OpenAI API Key</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6">Stored only in your browser's localStorage. Never sent anywhere except <code style="color:var(--blue)">api.openai.com</code>.</p>
+    <input id="api-key-input" type="password" class="filter-input" placeholder="sk-…" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:4px">
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button class="btn btn-secondary" onclick="closeKeyModal()" style="margin-top:0;padding:7px 14px">Cancel</button>
+      <button class="btn" onclick="saveKeyFromModal()" style="margin-top:0;padding:7px 14px">Save Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI COACH TAB -->
+<div class="tab-content" id="tab-coach">
+  <div class="coach-header">
+    <div class="coach-timeframe-bar">
+      <span class="filter-label">Timeframe:</span>
+      <button class="tf-btn" data-tf="day" onclick="selectTimeframe('day')">Today</button>
+      <button class="tf-btn" data-tf="week" onclick="selectTimeframe('week')">This Week</button>
+      <button class="tf-btn" data-tf="month" onclick="selectTimeframe('month')">This Month</button>
+      <button class="tf-btn" data-tf="custom" onclick="selectTimeframe('custom')">Custom</button>
+      <span id="coach-custom-range" style="display:none;gap:6px;align-items:center">
+        <input type="date" class="filter-input" id="coach-from" onchange="onCoachCustomRangeChange()">
+        <span class="text-muted" style="font-size:11px">to</span>
+        <input type="date" class="filter-input" id="coach-to" onchange="onCoachCustomRangeChange()">
+      </span>
+      <button class="btn btn-secondary" id="coach-reanalyze-btn" onclick="startCoachSession(true)" style="padding:6px 10px;font-size:11px;margin-top:0" title="Start a fresh coaching session with the current timeframe">🔄 Re-analyze</button>
+      <span id="coach-key-indicator" style="margin-left:auto;font-size:11px;cursor:pointer" onclick="promptOpenAIKey()"></span>
+    </div>
+    <div class="card coach-context-strip" id="coach-context-strip">
+      <span class="text-muted">Pick a timeframe to start a coaching session.</span>
+    </div>
+  </div>
+
+  <div class="card coach-chat-card">
+    <div id="coach-messages" class="coach-messages">
+      <div class="empty-state" style="padding:40px 20px">
+        <div class="empty-icon">🎯</div>
+        <p>Select a timeframe above to begin a coaching session.</p>
+      </div>
+    </div>
+    <div class="coach-input-row">
+      <textarea id="coach-input" class="coach-input" rows="2" placeholder="Reply to the coach… (Enter to send, Shift+Enter for newline)" onkeydown="handleCoachInputKey(event)" disabled></textarea>
+      <button class="btn" id="coach-send-btn" onclick="sendCoachMessage()" style="margin-top:0" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════
 //  STATE
@@ -379,7 +460,25 @@ let notes = {};       // { groupId: string }
 let charts = {};
 let calYear, calMonth;
 
+// AI Coach state
+let coachMessages = [];       // [{role:'user'|'assistant'|'system', content:string}]
+let coachTimeframe = null;    // 'day' | 'week' | 'month' | 'custom' | null
+let coachFrom = '', coachTo = '';
+let coachLoading = false;
+let coachInitialized = false;
+let _openAIKey = '';          // in-memory key — survives even if localStorage is blocked
+
 const MULTIPLIER = 100; // options multiplier
+const COACH_MODEL = 'gpt-4.1';
+const COACH_SYSTEM_PROMPT = `You are an experienced, candid trading coach speaking with a retail day trader who journals their trades. Your job is to help them identify patterns in their trading behavior — especially recurring mistakes in losing trades — and guide them toward concrete, actionable improvements in process and psychology.
+
+Ground rules:
+- This is NOT financial advice. Never tell the user what to buy, sell, or when to enter/exit any market position. Coach only their PROCESS and PSYCHOLOGY.
+- You will always be given the user's latest Thinkorswim export (or a clean summary of it) at the start of the message. Base every single observation strictly on the provided data only. Never invent trades, market context, or external events.
+- On your first message for a session, open with 2–3 concrete observations grounded in the specific trade data. Prioritize recurring patterns across LOSING trades (same ticker repeated, same DTE bucket, holding duration trends, sizing up after losses/tilt, calls-vs-puts skew, specific times-of-day, over-trading, etc.), but include at least one positive pattern or strength if one clearly exists. After the observations, ask ONE focused coaching question to open the dialogue.
+- On subsequent turns, keep replies under ~150 words. Stay in coach mode: reflect back, ask clarifying questions, suggest one small testable experiment, affirm progress. Avoid lecturing.
+- When you cite evidence, reference specific trades or tickers from the provided context.
+- If the data is too sparse to draw conclusions, say so honestly and ask what the user wants to focus on.`;
 
 // ═══════════════════════════════════════════════════════
 //  PERSISTENCE
@@ -391,6 +490,13 @@ function save() {
     localStorage.setItem('tj_notes', JSON.stringify(notes));
   } catch(e) {}
 }
+function saveCoach() {
+  try {
+    localStorage.setItem('tj_coach_messages', JSON.stringify(coachMessages));
+    localStorage.setItem('tj_coach_timeframe', coachTimeframe || '');
+    localStorage.setItem('tj_coach_range', JSON.stringify({ from: coachFrom, to: coachTo }));
+  } catch(e) {}
+}
 function load() {
   try {
     const t = localStorage.getItem('tj_trades');
@@ -399,6 +505,14 @@ function load() {
     if (t) allTrades = JSON.parse(t);
     if (g) tradeGroups = JSON.parse(g);
     if (n) notes = JSON.parse(n);
+    const cm = localStorage.getItem('tj_coach_messages');
+    const ct = localStorage.getItem('tj_coach_timeframe');
+    const cr = localStorage.getItem('tj_coach_range');
+    if (cm) coachMessages = JSON.parse(cm);
+    if (ct) coachTimeframe = ct || null;
+    if (cr) { const r = JSON.parse(cr); coachFrom = r.from || ''; coachTo = r.to || ''; }
+    const storedKey = localStorage.getItem('tj_openai_key');
+    if (storedKey) _openAIKey = storedKey;
   } catch(e) {}
 }
 
@@ -409,11 +523,12 @@ function showTab(id) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
-  const tabs = ['import','log','dashboard','calendar'];
+  const tabs = ['import','log','dashboard','calendar','coach'];
   document.querySelectorAll('.nav-tab')[tabs.indexOf(id)].classList.add('active');
   if (id === 'log') renderLog();
   if (id === 'dashboard') renderDashboard();
   if (id === 'calendar') renderCalendar();
+  if (id === 'coach') initCoach();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1892,12 +2007,387 @@ function setSaveIndicator(state, label) {
 function confirmClear() {
   if (confirm('Clear all trade data? This cannot be undone.')) {
     allTrades = []; tradeGroups = []; notes = {};
-    try { localStorage.removeItem('tj_trades'); localStorage.removeItem('tj_groups'); localStorage.removeItem('tj_notes'); } catch(e){}
+    coachMessages = []; coachTimeframe = null; coachFrom = ''; coachTo = '';
+    try {
+      localStorage.removeItem('tj_trades'); localStorage.removeItem('tj_groups'); localStorage.removeItem('tj_notes');
+      localStorage.removeItem('tj_coach_messages'); localStorage.removeItem('tj_coach_timeframe'); localStorage.removeItem('tj_coach_range');
+    } catch(e){}
     updateNavCount();
     renderLog();
+    if (coachInitialized) initCoach();
     document.getElementById('import-status').style.display = 'none';
     setSaveIndicator('unsaved', 'No data');
   }
+}
+
+// ═══════════════════════════════════════════════════════
+//  AI COACH
+// ═══════════════════════════════════════════════════════
+function getOpenAIKey() {
+  return _openAIKey;
+}
+function setOpenAIKey(k) {
+  _openAIKey = k;
+  try {
+    if (k) localStorage.setItem('tj_openai_key', k);
+    else localStorage.removeItem('tj_openai_key');
+  } catch(e) {}
+  updateCoachKeyIndicator();
+}
+function promptOpenAIKey() {
+  const overlay = document.getElementById('api-key-modal-overlay');
+  const input = document.getElementById('api-key-input');
+  input.value = getOpenAIKey();
+  overlay.style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+  input.onkeydown = e => { if (e.key === 'Enter') saveKeyFromModal(); if (e.key === 'Escape') closeKeyModal(); };
+}
+function closeKeyModal() {
+  document.getElementById('api-key-modal-overlay').style.display = 'none';
+}
+function saveKeyFromModal() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (!val) { setOpenAIKey(''); closeKeyModal(); return; }
+  setOpenAIKey(val);
+  // Flash confirmation before closing
+  const btn = document.querySelector('#api-key-modal-overlay .btn:not(.btn-secondary)');
+  if (btn) { btn.textContent = '✓ Saved!'; btn.style.background = 'var(--green)'; }
+  setTimeout(() => {
+    closeKeyModal();
+    if (btn) { btn.textContent = 'Save Key'; btn.style.background = ''; }
+    if (!coachTimeframe) {
+      selectTimeframe('month');
+    } else if (!coachLoading && coachMessages.length === 0) {
+      startCoachSession(false);
+    }
+  }, 600);
+}
+function updateCoachKeyIndicator() {
+  const el = document.getElementById('coach-key-indicator');
+  if (!el) return;
+  const has = !!getOpenAIKey();
+  el.className = has ? 'key-ok' : 'key-missing';
+  el.textContent = has ? '✓ OpenAI key set (click to change)' : '⚠ Set OpenAI API key';
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function isoDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function getCoachDateRange() {
+  if (coachTimeframe === 'day')   return { from: todayISO(), to: todayISO() };
+  if (coachTimeframe === 'week')  return { from: isoDaysAgo(6), to: todayISO() };
+  if (coachTimeframe === 'month') return { from: isoDaysAgo(29), to: todayISO() };
+  if (coachTimeframe === 'custom') return { from: coachFrom || '', to: coachTo || '' };
+  return { from: '', to: '' };
+}
+function getCoachGroups() {
+  const { from, to } = getCoachDateRange();
+  if (!from && !to) return [];
+  return tradeGroups.filter(g => {
+    if (from && g.date < from) return false;
+    if (to && g.date > to) return false;
+    return true;
+  });
+}
+
+function buildCoachContext(groups) {
+  if (!groups.length) return '';
+  const closed = groups.filter(g => g.netPnl !== null && !g.isOpen);
+  const wins = closed.filter(g => g.netPnl > 0);
+  const losses = closed.filter(g => g.netPnl < 0);
+  const totalPnl = closed.reduce((s,g) => s + g.netPnl, 0);
+  const avgWin = wins.length ? wins.reduce((s,g)=>s+g.netPnl,0) / wins.length : 0;
+  const avgLoss = losses.length ? losses.reduce((s,g)=>s+g.netPnl,0) / losses.length : 0;
+  const largestWin = wins.length ? Math.max(...wins.map(g=>g.netPnl)) : 0;
+  const largestLoss = losses.length ? Math.min(...losses.map(g=>g.netPnl)) : 0;
+  const winRate = closed.length ? (wins.length / closed.length * 100) : null;
+
+  const byTicker = {};
+  closed.forEach(g => {
+    const t = g.underlying || '?';
+    byTicker[t] = (byTicker[t] || 0) + g.netPnl;
+  });
+  const tickerRanked = Object.entries(byTicker).sort((a,b) => b[1] - a[1]);
+  const bestTicker = tickerRanked[0];
+  const worstTicker = tickerRanked[tickerRanked.length - 1];
+
+  const byType = { CALL: 0, PUT: 0, Stock: 0 };
+  closed.forEach(g => {
+    const k = g.isOption ? (g.optType || '?') : 'Stock';
+    if (byType[k] !== undefined) byType[k] += g.netPnl;
+  });
+
+  const { from, to } = getCoachDateRange();
+  const label = coachTimeframe === 'day' ? 'today'
+              : coachTimeframe === 'week' ? 'the last 7 days'
+              : coachTimeframe === 'month' ? 'the last 30 days'
+              : `${from} to ${to}`;
+
+  const lines = [];
+  lines.push(`Trading data for ${label} (${from} to ${to}):`);
+  lines.push('');
+  lines.push(`Aggregate: ${groups.length} trades total, ${closed.length} closed, ${groups.length - closed.length} open.`);
+  lines.push(`Total P&L: $${totalPnl.toFixed(2)}.  Win rate: ${winRate === null ? 'N/A' : winRate.toFixed(1)+'%'} (${wins.length}W / ${losses.length}L).`);
+  lines.push(`Avg win: $${avgWin.toFixed(2)}.  Avg loss: $${avgLoss.toFixed(2)}.  Largest win: $${largestWin.toFixed(2)}.  Largest loss: $${largestLoss.toFixed(2)}.`);
+  if (bestTicker)  lines.push(`Best ticker: ${bestTicker[0]} ($${bestTicker[1].toFixed(2)}).`);
+  if (worstTicker && worstTicker[0] !== (bestTicker && bestTicker[0])) lines.push(`Worst ticker: ${worstTicker[0]} ($${worstTicker[1].toFixed(2)}).`);
+  lines.push(`By type P&L — Calls: $${byType.CALL.toFixed(2)} | Puts: $${byType.PUT.toFixed(2)} | Stock: $${byType.Stock.toFixed(2)}.`);
+  lines.push('');
+
+  // Sort losses first so pattern matching is front-loaded.
+  const sorted = groups.slice().sort((a,b) => {
+    const ap = a.netPnl ?? 0, bp = b.netPnl ?? 0;
+    return ap - bp;
+  });
+  const cap = 200;
+  const rows = sorted.slice(0, cap);
+  lines.push(`Per-trade detail (losses first${sorted.length > cap ? `, showing ${cap} of ${sorted.length}` : ''}):`);
+  lines.push('date | time | ticker | type | qty | avgEntry | avgExit | netPnl | durMin | dte | note');
+  rows.forEach(g => {
+    const type = g.isOption ? (g.optType || '?') : 'Stock';
+    const note = (notes[g.id] || '').replace(/[\r\n|]/g, ' ').slice(0, 120);
+    const pnl = g.netPnl === null ? 'OPEN' : g.netPnl.toFixed(2);
+    const qty = g.totalBuyQty || g.totalSellQty || '';
+    const avgE = g.avgBuy != null ? g.avgBuy.toFixed(2) : '';
+    const avgX = g.avgSell != null ? g.avgSell.toFixed(2) : '';
+    lines.push(`${g.date} | ${g.entryTime || ''} | ${g.underlying || '?'} | ${type} | ${qty} | ${avgE} | ${avgX} | ${pnl} | ${g.durationMin ?? ''} | ${g.dte ?? ''} | ${note}`);
+  });
+  return lines.join('\n');
+}
+
+function renderCoachContextStrip() {
+  const el = document.getElementById('coach-context-strip');
+  if (!el) return;
+  if (!coachTimeframe) {
+    el.innerHTML = `<span class="text-muted">Pick a timeframe to start a coaching session.</span>`;
+    return;
+  }
+  const groups = getCoachGroups();
+  const closed = groups.filter(g => g.netPnl !== null && !g.isOpen);
+  const wins = closed.filter(g => g.netPnl > 0).length;
+  const totalPnl = closed.reduce((s,g)=>s+g.netPnl, 0);
+  const winRate = closed.length ? (wins / closed.length * 100) : null;
+  const { from, to } = getCoachDateRange();
+  el.innerHTML = `
+    <span class="ctx-item">Range: <strong>${from || '—'} → ${to || '—'}</strong></span>
+    <span class="ctx-item">Trades: <strong>${groups.length}</strong></span>
+    <span class="ctx-item">Closed: <strong>${closed.length}</strong></span>
+    <span class="ctx-item">Total P&L: <strong class="${pnlClass(totalPnl)}">${fmt$(totalPnl)}</strong></span>
+    <span class="ctx-item">Win rate: <strong>${winRate === null ? '—' : fmtPct(winRate)}</strong></span>
+  `;
+}
+
+function setCoachButtonsActive() {
+  document.querySelectorAll('#tab-coach .tf-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tf === coachTimeframe);
+  });
+  const custom = document.getElementById('coach-custom-range');
+  if (custom) custom.style.display = coachTimeframe === 'custom' ? 'inline-flex' : 'none';
+  if (coachTimeframe === 'custom') {
+    document.getElementById('coach-from').value = coachFrom || '';
+    document.getElementById('coach-to').value = coachTo || '';
+  }
+}
+
+function renderCoachMessages() {
+  const box = document.getElementById('coach-messages');
+  if (!box) return;
+  if (!coachMessages.length && !coachLoading) {
+    const keyWarn = !getOpenAIKey()
+      ? `<div class="coach-msg system"><div class="coach-bubble">Set your OpenAI API key (top right) to start coaching.</div></div>`
+      : '';
+    box.innerHTML = keyWarn + `<div class="empty-state" style="padding:40px 20px">
+      <div class="empty-icon">🎯</div>
+      <p>${coachTimeframe ? 'Starting session…' : 'Select a timeframe above to begin a coaching session.'}</p>
+    </div>`;
+    return;
+  }
+  // Skip the very first user message (trade-data payload) in the visible chat.
+  const visible = coachMessages.slice();
+  if (visible.length && visible[0].role === 'user' && visible[0].content.startsWith('Trading data for')) {
+    visible.shift();
+  }
+  let html = visible.map(m => {
+    const safe = escapeHtml(m.content);
+    return `<div class="coach-msg ${m.role}"><div class="coach-bubble">${safe}</div></div>`;
+  }).join('');
+  if (coachLoading) {
+    html += `<div class="coach-msg assistant"><div class="coach-bubble"><span class="coach-typing"><span></span><span></span><span></span></span></div></div>`;
+  }
+  box.innerHTML = html;
+  box.scrollTop = box.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function setCoachInputEnabled(enabled) {
+  const ta = document.getElementById('coach-input');
+  const btn = document.getElementById('coach-send-btn');
+  if (ta) ta.disabled = !enabled;
+  if (btn) btn.disabled = !enabled;
+}
+
+function handleCoachInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendCoachMessage();
+  }
+}
+
+function onCoachCustomRangeChange() {
+  coachFrom = document.getElementById('coach-from').value;
+  coachTo = document.getElementById('coach-to').value;
+  saveCoach();
+  renderCoachContextStrip();
+  if (coachFrom && coachTo) {
+    if (coachMessages.length > 0) {
+      if (!confirm('Start a new coaching session with the new date range? Your current chat will be cleared.')) return;
+    }
+    startCoachSession(true);
+  }
+}
+
+async function selectTimeframe(tf) {
+  if (tf !== 'custom' && coachMessages.length > 0 && coachTimeframe !== tf) {
+    if (!confirm('Start a new coaching session? Your current chat will be cleared.')) return;
+  }
+  coachTimeframe = tf;
+  setCoachButtonsActive();
+  renderCoachContextStrip();
+  saveCoach();
+  if (tf === 'custom') {
+    if (!coachFrom || !coachTo) return;
+  }
+  await startCoachSession(true);
+}
+
+async function startCoachSession(reset) {
+  if (!coachTimeframe) return;
+  if (reset) {
+    coachMessages = [];
+    saveCoach();
+  }
+  renderCoachContextStrip();
+  const groups = getCoachGroups();
+  if (!groups.length) {
+    coachMessages = [];
+    saveCoach();
+    const box = document.getElementById('coach-messages');
+    if (box) box.innerHTML = `<div class="empty-state" style="padding:40px 20px">
+      <div class="empty-icon">📭</div>
+      <p>No trades in this window — try another timeframe.</p>
+    </div>`;
+    setCoachInputEnabled(false);
+    return;
+  }
+  if (!getOpenAIKey()) {
+    renderCoachMessages();
+    setCoachInputEnabled(false);
+    return;
+  }
+  const context = buildCoachContext(groups);
+  coachMessages = [{ role: 'user', content: context }];
+  saveCoach();
+  renderCoachMessages();
+  setCoachInputEnabled(false);
+  coachLoading = true;
+  renderCoachMessages();
+  try {
+    const reply = await callClaude(coachMessages);
+    coachMessages.push({ role: 'assistant', content: reply });
+    saveCoach();
+  } catch (err) {
+    coachMessages.push({ role: 'system', content: 'Coach error: ' + (err.message || String(err)) });
+    saveCoach();
+  } finally {
+    coachLoading = false;
+    renderCoachMessages();
+    setCoachInputEnabled(true);
+    const ta = document.getElementById('coach-input');
+    if (ta) ta.focus();
+  }
+}
+
+async function sendCoachMessage() {
+  const ta = document.getElementById('coach-input');
+  if (!ta) return;
+  const text = ta.value.trim();
+  if (!text || coachLoading) return;
+  if (!getOpenAIKey()) {
+    coachMessages.push({ role: 'system', content: 'No OpenAI API key set. Click the key indicator above to add one.' });
+    renderCoachMessages();
+    return;
+  }
+  coachMessages.push({ role: 'user', content: text });
+  ta.value = '';
+  saveCoach();
+  setCoachInputEnabled(false);
+  coachLoading = true;
+  renderCoachMessages();
+  try {
+    const reply = await callClaude(coachMessages);
+    coachMessages.push({ role: 'assistant', content: reply });
+    saveCoach();
+  } catch (err) {
+    coachMessages.push({ role: 'system', content: 'Coach error: ' + (err.message || String(err)) });
+    saveCoach();
+  } finally {
+    coachLoading = false;
+    renderCoachMessages();
+    setCoachInputEnabled(true);
+    ta.focus();
+  }
+}
+
+async function callClaude(messages) {
+  const key = getOpenAIKey();
+  if (!key) throw new Error('No API key');
+  const payload = {
+    model: COACH_MODEL,
+    max_completion_tokens: 1024,
+    messages: [
+      { role: 'system', content: COACH_SYSTEM_PROMPT },
+      ...messages.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.content }))
+    ]
+  };
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer ' + key
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = j.error?.message || JSON.stringify(j); } catch(e) { detail = await res.text(); }
+    throw new Error(`HTTP ${res.status} — ${detail}`);
+  }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '(no response)';
+}
+
+function initCoach() {
+  updateCoachKeyIndicator();
+  setCoachButtonsActive();
+  renderCoachContextStrip();
+  renderCoachMessages();
+  setCoachInputEnabled(coachMessages.length > 0 && !!getOpenAIKey());
+  coachInitialized = true;
 }
 
 // ═══════════════════════════════════════════════════════
