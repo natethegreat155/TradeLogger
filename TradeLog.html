@@ -469,6 +469,22 @@ let coachInitialized = false;
 let _openAIKey = '';          // in-memory key — survives even if localStorage is blocked
 
 const MULTIPLIER = 100; // options multiplier
+
+// Dollar value per 1-point move for common futures contracts.
+// Strips the leading / and trailing month-year code (e.g. M26, H27) to get the base.
+function getFuturesMultiplier(underlying) {
+  const base = (underlying || '').replace(/^\//, '').replace(/[FGHJKMNQUVXZ]\d{2,4}$/, '').toUpperCase();
+  const MAP = {
+    ES: 50,  MES: 5,    // E-mini / Micro E-mini S&P 500
+    NQ: 20,  MNQ: 2,    // E-mini / Micro E-mini Nasdaq-100
+    YM: 5,   MYM: 0.5,  // E-mini / Micro E-mini Dow
+    RTY: 50, M2K: 5,    // E-mini / Micro Russell 2000
+    GC: 100, MGC: 10,   // Gold / Micro Gold
+    CL: 1000, QM: 500,  // Crude / E-mini Crude
+    SI: 5000, SIL: 1000, // Silver / Micro Silver
+  };
+  return MAP[base] || 1;
+}
 const COACH_MODEL = 'gpt-4.1';
 const COACH_SYSTEM_PROMPT = `You are an experienced, candid trading coach speaking with a retail day trader who journals their trades. Your job is to help them identify patterns in their trading behavior — especially recurring mistakes in losing trades — and guide them toward concrete, actionable improvements in process and psychology.
 
@@ -745,8 +761,20 @@ function parseOptionSymbol(sym, exp, strike, type, desc) {
 }
 
 function parseTOSExp(exp) {
-  // "Jan 19 2024" or "19 Jan 24" or "2024-01-19"
+  if (!exp) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(exp)) return exp;
+  // TOS format: "27 APR 26" or "1 MAY 26" (D MON YY) — parse explicitly so we
+  // don't rely on browser-specific Date() heuristics for non-standard strings.
+  const MONS = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+  const m = exp.match(/^(\d{1,2})\s+([A-Z]{3})\s+(\d{2,4})$/i);
+  if (m) {
+    const mo = MONS[m[2].toUpperCase()];
+    if (mo !== undefined) {
+      const yr = parseInt(m[3]) < 100 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
+      const d = new Date(Date.UTC(yr, mo, parseInt(m[1])));
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
+  }
   const d = new Date(exp);
   if (!isNaN(d.getTime())) return d.toISOString().slice(0,10);
   return exp;
@@ -883,6 +911,19 @@ function parseTOSStatement(text) {
       });
     }
   }
+
+  // ── Dedup Format A vs Format B: same trade appears in both Cash Balance and
+  //    Account Trade History sections with different symbol strings. Keep the
+  //    first occurrence (Format A has richer data: full symbol + commissions).
+  //    Futures only appear in Format B, so they pass through untouched.
+  const _seenFill = new Map();
+  const _deduped = [];
+  for (const f of fills) {
+    const k = `${f.timestamp}|${f.underlying}|${f.side}|${f.qty}|${f.price}`;
+    if (!_seenFill.has(k)) { _seenFill.set(k, true); _deduped.push(f); }
+  }
+  fills.length = 0;
+  _deduped.forEach(f => fills.push(f));
 
   // ── Warn clearly if file parsed fine but had no tradeable rows ──
   if (fills.length === 0) {
@@ -1120,7 +1161,7 @@ function groupTrades(fills) {
       const avgSell = sells.length ? sells.reduce((s,s2) => s+s2.price*s2.qty, 0) / totalSellQty : 0;
       const netPos     = totalBuyQty - totalSellQty;
       const closedQty  = Math.min(totalBuyQty, totalSellQty);
-      const mult       = first.isOption ? MULTIPLIER : 1;
+      const mult       = first.isOption ? MULTIPLIER : getFuturesMultiplier(first.underlying);
       let grossPnl = 0;
       if (closedQty > 0) grossPnl = (avgSell - avgBuy) * closedQty * mult;
       const netPnl = grossPnl - totalCommission;
@@ -1201,7 +1242,7 @@ function fmtDuration(min) {
 // ═══════════════════════════════════════════════════════
 function buildScaleViz(g) {
   const sorted = g.fills.slice().sort((a, b) => a.timestamp - b.timestamp);
-  const mult = g.isOption ? MULTIPLIER : 1;
+  const mult = g.isOption ? MULTIPLIER : getFuturesMultiplier(g.underlying);
 
   // Simulate position and running P&L through fills
   // Tracks both long (avgLongCost) and short (avgShortCost) legs correctly
