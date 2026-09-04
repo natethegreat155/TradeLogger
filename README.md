@@ -4,7 +4,7 @@ A free, single-file HTML trade journal for day traders. No server, no account, n
 
 ## Features
 
-- Import trades from **Thinkorswim** and **Interactive Brokers** CSVs
+- Import trades from **Thinkorswim**, **Interactive Brokers** and **Fidelity** CSVs
 - Auto-groups fills into trade sessions with P&L, avg entry/exit, commissions, and duration
 - Dashboard with equity curve, win rate, profit factor, P&L by ticker/hour/day, and more
 - Calendar heatmap showing daily P&L at a glance
@@ -19,7 +19,7 @@ A free, single-file HTML trade journal for day traders. No server, no account, n
 
 1. Download `TradeLog.html` - just save it wherever you'll remember it lives.
 2. Open it in Chrome or Edge (recommended for full save functionality)
-3. Go to the **Import** tab (you should see this first as a default) and drag in your broker CSV. Currently configured only for Thinkorswim and IBKR.
+3. Go to the **Import** tab (you should see this first as a default) and drag in your broker CSV. Currently configured for Thinkorswim, IBKR and Fidelity.
 4. Your trades appear in the **Trade Log** tab immediately
 5. Hit **Save Journal** to export a `.json` backup
 
@@ -53,6 +53,23 @@ The parser reads the Description column and extracts the symbol, expiration, str
 4. Drop into TradeLogger
 
 Activity Statement CSVs also work.
+
+### Fidelity
+
+Use the **History** download from the **Activity & Orders** tab — the file named `History_for_Account_X…….csv`. That's the one with your actual trades in it.
+
+1. On Fidelity.com, open the **Activity & Orders** tab
+2. Select a **single account**, then the **History** sub-tab, and set your date range
+3. Click **Download** — this saves `History_for_Account_X…….csv`
+4. Drop the file into TradeLogger as-is
+
+> ⛔ **Not `Portfolio_Positions_<date>.csv`.** That export is a snapshot of what you currently hold — it has no buys, sells or trade dates in it, so there is nothing to journal. TradeLogger recognises it and tells you to grab the History download instead.
+
+Dividends, reinvestments, journal entries, and core/money-market cash sweeps are filtered out automatically, so only real trades land in the log. Options that expired worthless are imported as closing fills at $0 and dated to the real expiration date rather than the settlement date. Stock, option and fractional-share fills are all supported.
+
+Commissions come from Fidelity's `Amount` column — the actual cash that moved — so a trade's P&L matches your account to the cent even when Fidelity folds an unlisted regulatory fee into the total.
+
+> **Note on times:** Fidelity's history export records only a *Run Date* — there are no execution timestamps. Trades import with correct P&L, but same-day fills are sequenced one second apart from 12:00 ET in the order they appear in the file, so **hold durations and the "P&L by Hour of Day" chart aren't meaningful for Fidelity-sourced trades**. Active Trader Pro exports that include a Time column are used as-is with real times.
 
 **Multiple files at once:** You can drag several CSVs in one drop. Duplicates are automatically filtered by matching timestamp + symbol + side + qty + price.
 
