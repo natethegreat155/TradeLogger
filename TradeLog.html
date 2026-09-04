@@ -426,12 +426,36 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
 <!-- API KEY MODAL -->
 <div id="api-key-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.5)">
-    <div style="font-size:14px;font-weight:600;margin-bottom:6px">OpenAI API Key</div>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6">Stored only in your browser's localStorage. Never sent anywhere except <code style="color:var(--blue)">api.openai.com</code>.</p>
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">AI Coach — API Settings</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6">Stored only in your browser's localStorage, and sent only to the endpoint shown below. Any provider with an <strong>OpenAI-compatible</strong> <code style="color:var(--blue)">/chat/completions</code> API works.</p>
+
+    <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:4px">Provider</label>
+    <select id="api-provider-input" class="filter-input" onchange="onProviderChange()" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:10px">
+      <option value="openai">OpenAI</option>
+      <option value="zai">Z.ai (GLM)</option>
+      <option value="bigmodel">Zhipu BigModel (GLM, China)</option>
+      <option value="custom">Custom (OpenAI-compatible)</option>
+    </select>
+
+    <div id="api-base-row" style="display:none">
+      <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:4px">Endpoint URL</label>
+      <input id="api-base-input" type="text" class="filter-input" placeholder="https://…/v1/chat/completions" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:10px">
+    </div>
+
+    <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:4px">Model</label>
+    <input id="api-model-input" type="text" class="filter-input" placeholder="model name" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:10px">
+
+    <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:4px">Max output tokens <span style="opacity:.7">— reasoning models spend part of this thinking before they reply</span></label>
+    <input id="api-maxtok-input" type="number" min="256" step="256" class="filter-input" placeholder="provider default" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:10px">
+
+    <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:4px">API key</label>
     <input id="api-key-input" type="password" class="filter-input" placeholder="sk-…" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:4px">
+
+    <div id="api-endpoint-note" style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.5"></div>
+
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
       <button class="btn btn-secondary" onclick="closeKeyModal()" style="margin-top:0;padding:7px 14px">Cancel</button>
-      <button class="btn" onclick="saveKeyFromModal()" style="margin-top:0;padding:7px 14px">Save Key</button>
+      <button class="btn" onclick="saveKeyFromModal()" style="margin-top:0;padding:7px 14px">Save</button>
     </div>
   </div>
 </div>
@@ -489,6 +513,10 @@ let coachFrom = '', coachTo = '';
 let coachLoading = false;
 let coachInitialized = false;
 let _openAIKey = '';          // in-memory key — survives even if localStorage is blocked
+let _llmProvider = 'openai';  // key into LLM_PROVIDERS
+let _llmModel = '';           // overrides the provider default when set
+let _llmBaseUrl = '';         // full chat-completions URL, for the 'custom' provider
+let _llmMaxTokens = '';       // optional output-budget override; blank = provider default
 
 const MULTIPLIER = 100; // options multiplier
 
@@ -507,7 +535,47 @@ function getFuturesMultiplier(underlying) {
   };
   return MAP[base] || 1;
 }
-const COACH_MODEL = 'gpt-4.1';
+// ── LLM providers ──
+// The coach speaks the OpenAI chat-completions dialect, which most vendors
+// implement, so any compatible endpoint works — only the URL, model name and
+// the max-tokens parameter differ. `tokenParam` matters: OpenAI's newer models
+// want max_completion_tokens, while most compatible APIs still expect max_tokens.
+const LLM_PROVIDERS = {
+  openai: {
+    label: 'OpenAI',
+    url: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-4.1',
+    tokenParam: 'max_completion_tokens',
+    keyHint: 'sk-…',
+    maxTokens: 2048,
+  },
+  zai: {
+    label: 'Z.ai (GLM)',
+    url: 'https://api.z.ai/api/paas/v4/chat/completions',
+    model: 'glm-5.3-flash',
+    tokenParam: 'max_tokens',
+    keyHint: 'your Z.ai API key',
+    // Reasoning runs before the reply, so the budget covers thinking + answer.
+    maxTokens: 8192,
+  },
+  bigmodel: {
+    label: 'Zhipu BigModel (GLM, China)',
+    url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    model: 'glm-5.3-flash',
+    tokenParam: 'max_tokens',
+    keyHint: 'your BigModel API key',
+    maxTokens: 8192,
+  },
+  custom: {
+    label: 'Custom (OpenAI-compatible)',
+    url: '',
+    model: '',
+    tokenParam: 'max_tokens',
+    keyHint: 'your API key',
+    maxTokens: 4096,
+  },
+};
+const COACH_MODEL = 'gpt-4.1'; // legacy default, superseded by getLLMConfig()
 const COACH_SYSTEM_PROMPT = `You are an experienced, candid trading coach speaking with a retail day trader who journals their trades. Your job is to help them identify patterns in their trading behavior — especially recurring mistakes in losing trades — and guide them toward concrete, actionable improvements in process and psychology.
 
 Ground rules:
@@ -551,6 +619,11 @@ function load() {
     if (cr) { const r = JSON.parse(cr); coachFrom = r.from || ''; coachTo = r.to || ''; }
     const storedKey = localStorage.getItem('tj_openai_key');
     if (storedKey) _openAIKey = storedKey;
+    const p = localStorage.getItem('tj_llm_provider');
+    if (p && LLM_PROVIDERS[p]) _llmProvider = p;
+    _llmModel = localStorage.getItem('tj_llm_model') || '';
+    _llmBaseUrl = localStorage.getItem('tj_llm_base') || '';
+    _llmMaxTokens = localStorage.getItem('tj_llm_maxtok') || '';
   } catch(e) {}
 }
 
@@ -2465,9 +2538,61 @@ function setOpenAIKey(k) {
   } catch(e) {}
   updateCoachKeyIndicator();
 }
+// Reflect the picked provider: reveal the URL box for 'custom', prefill the
+// model default, and show exactly where the key will be sent.
+function onProviderChange() {
+  const sel = document.getElementById('api-provider-input').value;
+  const p = LLM_PROVIDERS[sel] || LLM_PROVIDERS.openai;
+  const modelEl = document.getElementById('api-model-input');
+  const baseRow = document.getElementById('api-base-row');
+  const baseEl = document.getElementById('api-base-input');
+  const keyEl = document.getElementById('api-key-input');
+
+  baseRow.style.display = sel === 'custom' ? 'block' : 'none';
+  // Only overwrite the model box when it still holds another provider's default.
+  const isStale = !modelEl.value.trim() ||
+    Object.values(LLM_PROVIDERS).some(q => q.model && q.model === modelEl.value.trim());
+  if (isStale) modelEl.value = p.model;
+  modelEl.placeholder = p.model || 'model name';
+  keyEl.placeholder = p.keyHint;
+  const mt = document.getElementById('api-maxtok-input');
+  if (mt) mt.placeholder = String(p.maxTokens || 4096) + ' (provider default)';
+  if (sel !== 'custom') baseEl.value = '';
+  updateEndpointNote();
+}
+function updateEndpointNote() {
+  const el = document.getElementById('api-endpoint-note');
+  if (!el) return;
+  const sel = document.getElementById('api-provider-input').value;
+  const p = LLM_PROVIDERS[sel] || LLM_PROVIDERS.openai;
+  const url = (sel === 'custom' ? document.getElementById('api-base-input').value.trim() : '') || p.url;
+  el.innerHTML = url
+    ? `Requests go to <code style="color:var(--blue)">${url.replace(/[<>&]/g, '')}</code>`
+    : 'Enter the full chat-completions URL for your provider.';
+}
+function setLLMSettings(provider, model, baseUrl, maxTokens) {
+  _llmProvider = LLM_PROVIDERS[provider] ? provider : 'openai';
+  _llmModel = model || '';
+  _llmBaseUrl = baseUrl || '';
+  _llmMaxTokens = maxTokens || '';
+  try {
+    localStorage.setItem('tj_llm_provider', _llmProvider);
+    localStorage.setItem('tj_llm_model', _llmModel);
+    localStorage.setItem('tj_llm_base', _llmBaseUrl);
+    localStorage.setItem('tj_llm_maxtok', _llmMaxTokens);
+  } catch(e) {}
+  updateCoachKeyIndicator();
+}
 function promptOpenAIKey() {
   const overlay = document.getElementById('api-key-modal-overlay');
   const input = document.getElementById('api-key-input');
+  document.getElementById('api-provider-input').value = _llmProvider;
+  document.getElementById('api-base-input').value = _llmBaseUrl;
+  document.getElementById('api-model-input').value = _llmModel || (LLM_PROVIDERS[_llmProvider] || {}).model || '';
+  document.getElementById('api-maxtok-input').value = _llmMaxTokens;
+  document.getElementById('api-base-row').style.display = _llmProvider === 'custom' ? 'block' : 'none';
+  document.getElementById('api-base-input').oninput = updateEndpointNote;
+  updateEndpointNote();
   input.value = getOpenAIKey();
   overlay.style.display = 'flex';
   setTimeout(() => input.focus(), 50);
@@ -2478,6 +2603,13 @@ function closeKeyModal() {
 }
 function saveKeyFromModal() {
   const val = document.getElementById('api-key-input').value.trim();
+  // Endpoint settings are saved even when the key box is left empty.
+  setLLMSettings(
+    document.getElementById('api-provider-input').value,
+    document.getElementById('api-model-input').value.trim(),
+    document.getElementById('api-base-input').value.trim(),
+    document.getElementById('api-maxtok-input').value.trim()
+  );
   if (!val) { setOpenAIKey(''); closeKeyModal(); return; }
   setOpenAIKey(val);
   // Flash confirmation before closing
@@ -2498,7 +2630,8 @@ function updateCoachKeyIndicator() {
   if (!el) return;
   const has = !!getOpenAIKey();
   el.className = has ? 'key-ok' : 'key-missing';
-  el.textContent = has ? '✓ OpenAI key set (click to change)' : '⚠ Set OpenAI API key';
+  const cfg = getLLMConfig();
+  el.textContent = has ? `✓ ${cfg.model} via ${cfg.providerLabel} (click to change)` : '⚠ Set API key';
 }
 
 function todayISO() {
@@ -2632,7 +2765,7 @@ function renderCoachMessages() {
   if (!box) return;
   if (!coachMessages.length && !coachLoading) {
     const keyWarn = !getOpenAIKey()
-      ? `<div class="coach-msg system"><div class="coach-bubble">Set your OpenAI API key (top right) to start coaching.</div></div>`
+      ? `<div class="coach-msg system"><div class="coach-bubble">Set your API key (top right) to start coaching. Works with OpenAI or any OpenAI-compatible provider.</div></div>`
       : '';
     box.innerHTML = keyWarn + `<div class="empty-state" style="padding:40px 20px">
       <div class="empty-icon">🎯</div>
@@ -2738,7 +2871,7 @@ async function startCoachSession(reset) {
   coachLoading = true;
   renderCoachMessages();
   try {
-    const reply = await callClaude(coachMessages);
+    const reply = await callLLM(coachMessages);
     coachMessages.push({ role: 'assistant', content: reply });
     saveCoach();
   } catch (err) {
@@ -2759,7 +2892,7 @@ async function sendCoachMessage() {
   const text = ta.value.trim();
   if (!text || coachLoading) return;
   if (!getOpenAIKey()) {
-    coachMessages.push({ role: 'system', content: 'No OpenAI API key set. Click the key indicator above to add one.' });
+    coachMessages.push({ role: 'system', content: 'No API key set. Click the key indicator above to add one.' });
     renderCoachMessages();
     return;
   }
@@ -2770,7 +2903,7 @@ async function sendCoachMessage() {
   coachLoading = true;
   renderCoachMessages();
   try {
-    const reply = await callClaude(coachMessages);
+    const reply = await callLLM(coachMessages);
     coachMessages.push({ role: 'assistant', content: reply });
     saveCoach();
   } catch (err) {
@@ -2784,32 +2917,94 @@ async function sendCoachMessage() {
   }
 }
 
-async function callClaude(messages) {
+// Resolve the endpoint/model actually in force: provider preset, with the
+// model and (for 'custom') the URL overridden by whatever the user typed.
+function getLLMConfig() {
+  const p = LLM_PROVIDERS[_llmProvider] || LLM_PROVIDERS.openai;
+  return {
+    providerLabel: p.label,
+    url: (_llmProvider === 'custom' ? _llmBaseUrl : '') || p.url,
+    model: _llmModel || p.model,
+    tokenParam: p.tokenParam,
+    maxTokens: parseInt(_llmMaxTokens, 10) > 0 ? parseInt(_llmMaxTokens, 10) : (p.maxTokens || 4096),
+  };
+}
+
+async function callLLM(messages, opts = {}) {
   const key = getOpenAIKey();
   if (!key) throw new Error('No API key');
+  const cfg = getLLMConfig();
+  if (!cfg.url) throw new Error('No API endpoint set — open the key settings and enter one.');
+  if (!cfg.model) throw new Error('No model name set — open the key settings and enter one.');
+
   const payload = {
-    model: COACH_MODEL,
-    max_completion_tokens: 1024,
+    model: cfg.model,
     messages: [
       { role: 'system', content: COACH_SYSTEM_PROMPT },
       ...messages.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.content }))
     ]
   };
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'authorization': 'Bearer ' + key
-    },
-    body: JSON.stringify(payload)
-  });
+  // Reasoning models spend part of this budget thinking before they answer, so it
+  // has to cover both. Tunable per provider, and overridable in the settings modal.
+  payload[cfg.tokenParam] = cfg.maxTokens;
+
+  let res;
+  try {
+    res = await fetch(cfg.url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer ' + key
+      },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    // fetch only rejects on network/CORS failures — an HTTP error still resolves.
+    let host = cfg.url;
+    try { host = new URL(cfg.url).host; } catch (e) {}
+    throw new Error(
+      `Could not reach ${host}. This is usually CORS: the provider has to allow ` +
+      `browser requests, and many only permit server-side calls. Check the browser ` +
+      `console for a CORS error, and verify the endpoint URL. (${err.message})`
+    );
+  }
+
   if (!res.ok) {
     let detail = '';
-    try { const j = await res.json(); detail = j.error?.message || JSON.stringify(j); } catch(e) { detail = await res.text(); }
+    try { const j = await res.json(); detail = j.error?.message || j.message || JSON.stringify(j); } catch(e) { detail = await res.text(); }
+    if (/max_?(tokens|completion)/i.test(detail)) {
+      detail += ` — the output limit (${cfg.maxTokens}) is above what this model allows; lower it in the key settings.`;
+    }
+    if (res.status === 401 || res.status === 403) {
+      detail += ` — check the key matches the selected provider (${cfg.providerLabel}).`;
+    } else if (res.status === 404) {
+      detail += ` — check the model name "${cfg.model}" and the endpoint URL.`;
+    }
     throw new Error(`HTTP ${res.status} — ${detail}`);
   }
+
   const data = await res.json();
-  return data.choices?.[0]?.message?.content || '(no response)';
+  const choice = data.choices?.[0] || {};
+  const content = (choice.message?.content || '').trim();
+  const truncated = choice.finish_reason === 'length';
+
+  if (!content) {
+    // A reasoning model that used its whole budget thinking returns empty content.
+    // Showing the raw reasoning here would look like a mid-sentence cut-off reply.
+    if (truncated || (choice.message?.reasoning_content || '').trim()) {
+      throw new Error(
+        `The model used its entire ${cfg.maxTokens}-token output budget thinking and never ` +
+        `produced a reply. Raise "Max output tokens" in the key settings, or pick a narrower ` +
+        `timeframe so there are fewer trades to reason about.`
+      );
+    }
+    return '(no response)';
+  }
+  // Answered, but ran up against the ceiling mid-sentence — say so rather than
+  // letting it look like the coach simply stopped talking.
+  return truncated
+    ? content + '\n\n— reply cut off at the output limit; ask a narrower question to see the rest —'
+    : content;
 }
 
 function initCoach() {

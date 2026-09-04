@@ -12,6 +12,7 @@ A free, single-file HTML trade journal for day traders. No server, no account, n
 - Scaling visualization showing exactly how you built and exited positions
 - All data saved locally — export/import as `.json` to back up or move between devices
 - All times displayed in **Eastern Time** to match broker timestamps
+- Optional **AI Coach** tab — bring your own API key from OpenAI, Z.ai (GLM), or any OpenAI-compatible provider
 
 ---
 
@@ -157,6 +158,26 @@ Each trade has a notes field (visible when expanded). Use it for post-trade anal
 **Load Journal** — imports a previously saved `.json`, merging trades and notes with anything already loaded. Duplicates are skipped.
 
 > Your data is also kept in `localStorage` between sessions, but the `.json` file is your reliable backup. Save it regularly.
+
+---
+
+## AI Coach
+
+The **Coach** tab sends a summary of your trades — stats plus up to 200 trade rows and your notes, never raw fills — to a language model and talks through the patterns in them.
+
+Click the key indicator (top right of the tab) to configure it:
+
+| Field | What it's for |
+|-------|----------------|
+| Provider | OpenAI, Z.ai (GLM), Zhipu BigModel, or Custom |
+| Model | Model name, prefilled with the provider's default — overwrite it with whatever you want to run |
+| Endpoint URL | Custom provider only: the full `/chat/completions` URL |
+| Max output tokens | Optional. Reasoning models spend part of this thinking before they reply, so leave room — blank uses the provider default |
+| API key | Your key, stored only in this browser's localStorage |
+
+Any provider with an **OpenAI-compatible** `/chat/completions` API works. The modal shows the exact endpoint your key will be sent to before you save, and it is never sent anywhere else.
+
+> The coach is prompted to discuss process and psychology only, and is explicitly told not to give financial advice or tell you what to buy or sell.
 
 ---
 

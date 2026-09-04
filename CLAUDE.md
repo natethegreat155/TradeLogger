@@ -79,9 +79,17 @@ When touching a parser, keep a real export handy — format regressions are the 
 
 ## AI Coach tab
 
-Calls `https://api.openai.com/v1/chat/completions` directly from the browser (`callClaude`, line ~2660 — the name is historical; it is an OpenAI call) with `COACH_MODEL = 'gpt-4.1'`. The user's key lives in `localStorage.tj_openai_key` plus an in-memory `_openAIKey` fallback; it is never sent anywhere but OpenAI. `buildCoachContext()` serializes filtered trade stats plus up to 200 trade rows (with notes) into the first user message — the model only ever sees that summary, never raw fills.
+Calls an OpenAI-style `/chat/completions` endpoint directly from the browser (`callLLM`). The provider is **not** hardcoded: `LLM_PROVIDERS` holds presets (OpenAI, Z.ai/GLM, Zhipu BigModel, and a free-form Custom), and `getLLMConfig()` resolves the endpoint, model and max-tokens parameter actually in force. Anything speaking the OpenAI dialect works.
 
-`COACH_SYSTEM_PROMPT` (line 489) constrains the coach to process/psychology and forbids financial advice. Preserve those guardrails when editing it.
+Two things to preserve when touching it:
+
+- **`tokenParam` is per-provider.** OpenAI's newer models require `max_completion_tokens`; most compatible APIs still expect `max_tokens`. Sending the wrong one is rejected, so the payload key is built from the preset rather than written literally.
+- **Reasoning models need headroom and an empty-`content` path.** The per-provider `maxTokens` budget covers thinking *and* the answer, which is why GLM's is 4x OpenAI's; at the original flat 1024 a GLM model spent the whole budget mid-thought and returned `finish_reason: "length"` with empty `content`. Never fall back to rendering `reasoning_content` — it surfaces raw chain-of-thought that reads like a reply truncated mid-sentence. Thinking is left enabled deliberately; the budget is the knob, overridable per user in the settings modal (`tj_llm_maxtok`).
+- **`fetch` only rejects on network/CORS failures** — an HTTP 401/404 still resolves. Both paths are handled separately because a browser CORS block and a bad key look nothing alike to the user. All three bundled providers do send `Access-Control-Allow-Origin` (verified, including for `Origin: null`, which is what a `file://` page sends), so a local page can call them directly.
+
+Settings live in `localStorage` under `tj_llm_provider` / `tj_llm_model` / `tj_llm_base`; the key stays at `tj_openai_key` (name kept for backwards compatibility) plus an in-memory `_openAIKey` fallback. The key is only ever sent to the configured endpoint, which the settings modal displays verbatim before saving. `buildCoachContext()` serializes filtered trade stats plus up to 200 trade rows (with notes) into the first user message — the model only ever sees that summary, never raw fills.
+
+`COACH_SYSTEM_PROMPT` constrains the coach to process/psychology and forbids financial advice. Preserve those guardrails when editing it.
 
 ## Persistence keys
 
