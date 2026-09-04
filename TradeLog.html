@@ -364,7 +364,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
     <div class="stat-grid" id="stat-grid"></div>
     <div class="charts-grid">
       <div class="card"><div class="card-title">Equity Curve</div><div class="chart-wrap"><canvas id="equityChart"></canvas></div></div>
-      <div class="card"><div class="card-title">P&amp;L Distribution</div><div class="chart-wrap"><canvas id="distChart"></canvas></div></div>
+      <div class="card"><div class="card-title">Trade P&amp;L Scatter</div><div class="chart-wrap"><canvas id="distChart"></canvas></div></div>
     </div>
     <div class="charts-grid-3">
       <div class="card"><div class="card-title">P&amp;L by Ticker</div><div class="chart-wrap-sm"><canvas id="tickerChart"></canvas></div></div>
@@ -815,6 +815,10 @@ function parseTOSStatement(text) {
   // ── Format A regex: BOT/SOLD description lines ──
   const descRe = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+([A-Z\/\.]+)\s+100\s*(?:\([^)]+\)\s+)?(\d{1,2})\s+([A-Z]{3})\s+(\d{2})\s+([\d.]+)\s+(CALL|PUT)\s+@([\d.]+)/i;
   const stockRe = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+([A-Z\/\.]+)\s+@([\d.]+)$/i;
+  // Futures options: BOT +2 /ESM26:XCME 1/50 21 APR 26 (Tuesday) (Wk4) /E3BJ26:XCME 7200 CALL @7.70
+  const futOptRe = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+(\/[A-Z0-9]+)(?::[A-Z]+)?\s+1\/\d+\s+(\d{1,2})\s+([A-Z]{3})\s+(\d{2})\s+(?:\([^)]+\)\s*)*\/[A-Z0-9]+(?::[A-Z]+)?\s+([\d.]+)\s+(CALL|PUT)\s+@([\d.]+)/i;
+  // Plain futures: SOLD -1 /MNQM26:XCME @26960.25
+  const futuresRe = /(?:^|\s)(BOT|SOLD)\s+[+-]?(\d+)\s+(\/[A-Z0-9]+)(?::[A-Z]+)?\s+@([\d.]+)/i;
 
   let inCashSection = false;
   let inTradeHistory = false;
@@ -849,6 +853,41 @@ function parseTOSStatement(text) {
           symbol:`${sym} ${expDate} ${strike} ${optType.toUpperCase()}`,
           underlying:sym.toUpperCase(), expDate, strike:parseFloat(strike),
           optType:optType.toUpperCase(), isOption:true,
+          side:action.toUpperCase()==='BOT'?'BUY':'SELL', qty:parseInt(qtyStr),
+          price:parseFloat(priceStr),
+          commission:Math.abs(cleanNum(miscFeesCol))+Math.abs(cleanNum(commFeesCol)),
+          netAmount:cleanNum(amountCol), spread:'',
+        });
+        continue;
+      }
+      // Futures options (e.g. /ESM26:XCME 1/50 ... /E3BJ26:XCME 7200 CALL @7.70)
+      const fo = desc.match(futOptRe);
+      if (fo) {
+        const [, action, qtyStr, baseSym, day, mon, yr, strike, optType, priceStr] = fo;
+        const expDate = new Date(2000+parseInt(yr), MONTHS[mon.toUpperCase()], parseInt(day)).toISOString().slice(0,10);
+        const ts = parseDateTime(dateCol, timeCol);
+        if (!ts) continue;
+        fills.push({
+          broker:'tos', timestamp:ts, date:fmtDateET(ts),
+          symbol:`${baseSym} ${expDate} ${strike} ${optType.toUpperCase()}`,
+          underlying:baseSym, expDate, strike:parseFloat(strike),
+          optType:optType.toUpperCase(), isOption:false,
+          side:action.toUpperCase()==='BOT'?'BUY':'SELL', qty:parseInt(qtyStr),
+          price:parseFloat(priceStr),
+          commission:Math.abs(cleanNum(miscFeesCol))+Math.abs(cleanNum(commFeesCol)),
+          netAmount:cleanNum(amountCol), spread:'',
+        });
+        continue;
+      }
+      // Plain futures (e.g. /MNQM26:XCME @26960.25)
+      const ff = desc.match(futuresRe);
+      if (ff) {
+        const [, action, qtyStr, sym, priceStr] = ff;
+        const ts = parseDateTime(dateCol, timeCol);
+        if (!ts) continue;
+        fills.push({
+          broker:'tos', timestamp:ts, date:fmtDateET(ts),
+          symbol:sym, underlying:sym, expDate:null, strike:null, optType:null, isOption:false,
           side:action.toUpperCase()==='BOT'?'BUY':'SELL', qty:parseInt(qtyStr),
           price:parseFloat(priceStr),
           commission:Math.abs(cleanNum(miscFeesCol))+Math.abs(cleanNum(commFeesCol)),
@@ -1500,14 +1539,16 @@ function renderDashboard() {
       if (dd > maxDD) maxDD = dd;
     });
   const avgDuration = closed.reduce((s,g) => s+g.durationMin, 0) / closed.length;
-  // Consecutive streak
-  const sorted = closed.slice().sort((a,b) => a.date.localeCompare(b.date));
+  // Consecutive streak — by trading day (sum all trades per day, then count consecutive W/L days)
+  const dayPnl = {};
+  closed.forEach(g => { const d = g.closeDate || g.date; dayPnl[d] = (dayPnl[d] || 0) + g.netPnl; });
+  const tradingDays = Object.keys(dayPnl).sort();
   let streak = 0, streakType = '';
-  if (sorted.length > 0) {
-    const last = sorted[sorted.length-1];
-    streakType = last.netPnl > 0 ? 'W' : 'L';
-    for (let i = sorted.length-1; i >= 0; i--) {
-      if ((sorted[i].netPnl > 0 ? 'W' : 'L') === streakType) streak++;
+  if (tradingDays.length > 0) {
+    const lastDay = tradingDays[tradingDays.length - 1];
+    streakType = dayPnl[lastDay] > 0 ? 'W' : 'L';
+    for (let i = tradingDays.length - 1; i >= 0; i--) {
+      if ((dayPnl[tradingDays[i]] > 0 ? 'W' : 'L') === streakType) streak++;
       else break;
     }
   }
@@ -1523,7 +1564,7 @@ function renderDashboard() {
     { label: 'Largest Loss', value: fmt$(largestLoss), cls: 'pnl-neg' },
     { label: 'Max Drawdown', value: fmt$(maxDD), cls: 'pnl-neg', sub: 'Peak-to-trough' },
     { label: 'Avg Duration', value: fmtDuration(Math.round(avgDuration)), sub: 'Per trade' },
-    { label: 'Current Streak', value: `${streak} ${streakType}`, cls: streakType === 'W' ? 'pnl-pos' : streakType === 'L' ? 'pnl-neg' : '' },
+    { label: 'Current Streak', value: `${streak} ${streakType}`, cls: streakType === 'W' ? 'pnl-pos' : streakType === 'L' ? 'pnl-neg' : '', sub: 'Trading days' },
     { label: 'Open Trades', value: String(tradeGroups.filter(g=>g.isOpen).length) },
   ];
 
@@ -1556,20 +1597,39 @@ function buildCharts(closed) {
     options: chartOpts({ yFormat: v => '$'+v.toLocaleString() })
   });
 
-  // P&L Distribution histogram
-  const buckets = {};
-  const step = 100;
-  closed.forEach(g => {
-    const b = Math.round(g.netPnl / step) * step;
-    buckets[b] = (buckets[b] || 0) + 1;
-  });
-  const distKeys = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+  // Trade P&L — sorted bar chart (biggest loss → biggest win), one bar per trade
+  const distSorted = closed.slice().sort((a, b) => a.netPnl - b.netPnl);
+  const baseOpts = chartOpts({ yFormat: v => '$' + v.toLocaleString(), legend: false });
   charts.dist = new Chart(document.getElementById('distChart'), {
-    type: 'bar', data: {
-      labels: distKeys.map(k => '$'+k),
-      datasets: [{ data: distKeys.map(k => buckets[k]), backgroundColor: distKeys.map(k => k >= 0 ? 'rgba(63,185,80,.6)' : 'rgba(248,81,73,.6)'), borderWidth: 0 }]
+    type: 'bar',
+    data: {
+      labels: distSorted.map(g => g.underlying + (g.strike ? ` ${g.strike}${g.optType}` : '')),
+      datasets: [{
+        data: distSorted.map(g => +g.netPnl.toFixed(2)),
+        backgroundColor: distSorted.map(g => g.netPnl >= 0 ? 'rgba(63,185,80,.7)' : 'rgba(248,81,73,.7)'),
+        borderWidth: 0,
+      }]
     },
-    options: chartOpts({ legend: false })
+    options: {
+      ...baseOpts,
+      scales: {
+        ...baseOpts.scales,
+        x: { ...baseOpts.scales.x, ticks: { ...baseOpts.scales.x.ticks, display: false } }
+      },
+      plugins: {
+        ...baseOpts.plugins,
+        tooltip: {
+          ...baseOpts.plugins.tooltip,
+          callbacks: {
+            label: ctx => {
+              const g = distSorted[ctx.dataIndex];
+              const label = g.underlying + (g.strike ? ` ${g.strike} ${g.optType}` : '');
+              return `${label}: ${fmt$(g.netPnl)}`;
+            }
+          }
+        }
+      }
+    }
   });
 
   // Ticker P&L
