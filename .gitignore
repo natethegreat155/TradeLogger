@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────
+#  This is a PUBLIC repository. Never commit real account data.
+# ─────────────────────────────────────────────────────────────
+
+# Broker exports — Thinkorswim account statements and trade activity,
+# Interactive Brokers flex queries, Fidelity history and positions files.
+# These contain real trades, balances and account numbers.
+*.csv
+
+# Journal backups written by the app's "Save Journal" button
+# (TradeLog-YYYY-MM-DD.json), and any other local data dumps.
+*.json
+
+# Statements, confirmations and other personal documents
+*.pdf
+*.xlsx
+
+# Deliberately committed, anonymised parser fixtures are allowed —
+# put them in fixtures/ and scrub symbols, sizes and account numbers first.
+!fixtures/
+
+# macOS
+.DS_Store
