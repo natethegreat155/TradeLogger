@@ -63,6 +63,7 @@ nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: f
 .broker-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-top: 10px; }
 .broker-badge.tos { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
 .broker-badge.ibkr { background: rgba(88,166,255,.15); color: var(--blue); border: 1px solid rgba(88,166,255,.3); }
+.broker-badge.fidelity { background: rgba(188,140,255,.15); color: var(--purple); border: 1px solid rgba(188,140,255,.3); }
 .broker-badge.unknown { background: rgba(227,179,65,.15); color: var(--yellow); border: 1px solid rgba(227,179,65,.3); }
 .import-log { max-height: 220px; overflow-y: auto; font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; }
 .import-log-entry { padding: 4px 0; border-bottom: 1px solid var(--border); color: var(--text2); }
@@ -265,7 +266,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
         <input type="file" id="file-input" accept=".csv,.txt" multiple onchange="handleFileSelect(event)">
         <div class="drop-zone-icon">📂</div>
         <h3>Drop CSV file here</h3>
-        <p>Supports <strong style="color:var(--green)">Thinkorswim</strong> and <strong style="color:var(--blue)">Interactive Brokers</strong> exports<br>
+        <p>Supports <strong style="color:var(--green)">Thinkorswim</strong>, <strong style="color:var(--blue)">Interactive Brokers</strong> and <strong style="color:var(--purple)">Fidelity</strong> exports<br>
         You can drop multiple files at once</p>
         <button class="btn mt12" onclick="event.stopPropagation(); document.getElementById('file-input').click()">Choose File</button>
       </div>
@@ -301,6 +302,27 @@ hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; 
         <div class="format-step"><div class="step-num">1</div><div class="step-text">TWS or Client Portal → <strong>Reports</strong> → <strong>Flex Queries</strong></div></div>
         <div class="format-step"><div class="step-num">2</div><div class="step-text">Create query with <strong>Trades</strong> section, include: DateTime, Symbol, Buy/Sell, Quantity, T. Price, Comm/Fee, Proceeds</div></div>
         <div class="format-step"><div class="step-num">3</div><div class="step-text">Or use <strong>Activity Statement</strong> → download as <strong>CSV</strong></div></div>
+      </div>
+
+      <div class="card format-guide">
+        <div class="card-title">Fidelity Export</div>
+
+        <div style="padding:8px 10px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);border-radius:4px;font-size:11px;color:var(--green);line-height:1.6;margin-bottom:12px">
+          ✅ Use the file that starts with <strong>History_for_Account…</strong> — that's the one with your actual trades in it.
+        </div>
+
+        <div class="format-step"><div class="step-num">1</div><div class="step-text">On Fidelity.com, open the <strong>Activity &amp; Orders</strong> tab</div></div>
+        <div class="format-step"><div class="step-num">2</div><div class="step-text">Select a <strong>single account</strong>, then the <strong>History</strong> sub-tab and your date range</div></div>
+        <div class="format-step"><div class="step-num">3</div><div class="step-text">Click <strong>Download</strong> → saves <strong>History_for_Account_X…….csv</strong></div></div>
+        <div class="format-step"><div class="step-num">4</div><div class="step-text">Drop it in as-is — dividends, reinvestments, journal entries and cash sweeps are filtered out automatically, and expired options are closed at $0</div></div>
+
+        <div style="margin-top:12px;padding:8px 10px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:4px;font-size:11px;color:var(--red);line-height:1.6">
+          ⛔ <strong>Not <em>Portfolio_Positions_&lt;date&gt;.csv</em>.</strong> That one is a snapshot of what you currently hold — no buys, sells or trade dates, so there is nothing to journal. TradeLogger will tell you if you drop it in by mistake.
+        </div>
+
+        <div style="margin-top:8px;padding:8px 10px;background:rgba(227,179,65,.08);border:1px solid rgba(227,179,65,.25);border-radius:4px;font-size:11px;color:var(--yellow);line-height:1.6">
+          ⚠️ <strong>Fidelity's history export has no execution times</strong> — only a Run Date. P&amp;L, win rate and the calendar are exact, but hold durations and the <strong>P&amp;L by Hour</strong> chart aren't meaningful for these trades. Active Trader Pro exports that include a Time column are used as-is.
+        </div>
       </div>
 
       <div class="card" style="border-color:rgba(88,166,255,.3)">
@@ -577,15 +599,24 @@ function processFiles(files) {
       const text = e.target.result;
       const broker = detectBroker(text);
       appendLog(logEl, `📄 ${file.name} — detected: ${broker.toUpperCase()}`, broker === 'unknown' ? 'warn' : 'ok');
-      const brokerLabel = broker === 'tos' ? '📊 Thinkorswim (Trade History)' : broker === 'tos_stmt' ? '📊 Thinkorswim (Account Statement)' : broker === 'ibkr' ? '🏦 Interactive Brokers' : '❓ Unknown Format';
+      const brokerLabel = broker === 'tos' ? '📊 Thinkorswim (Trade History)' : broker === 'tos_stmt' ? '📊 Thinkorswim (Account Statement)' : broker === 'ibkr' ? '🏦 Interactive Brokers' : broker === 'fidelity' ? '🟢 Fidelity' : '❓ Unknown Format';
       badgeEl.innerHTML = `<span class="broker-badge ${broker === 'tos_stmt' ? 'tos' : broker}">${brokerLabel}</span>`;
       let fills = [];
       try {
         if (broker === 'tos') fills = parseTOS(text);
         else if (broker === 'tos_stmt') fills = parseTOSStatement(text);
         else if (broker === 'ibkr') fills = parseIBKR(text);
-        else { appendLog(logEl, `⚠️ Could not determine broker format. Try TOS or IBKR export.`, 'warn'); }
+        else if (broker === 'fidelity') fills = parseFidelity(text);
+        else if (broker === 'fidelity_positions') {
+          appendLog(logEl, `⚠️ This is a Fidelity "Portfolio Positions" file — a snapshot of what you currently hold. It has no buys, sells or trade dates in it, so there's nothing to journal.`, 'warn');
+          appendLog(logEl, `➡️ Download your trade history instead: Accounts & Trade → Activity & Orders → History tab → set a date range → Download.`, 'warn');
+        }
+        else { appendLog(logEl, `⚠️ Could not determine broker format. Expected a Thinkorswim, Interactive Brokers or Fidelity transaction/trade-history export — not a positions or balances file.`, 'warn'); }
       } catch(err) { appendLog(logEl, `❌ Parse error: ${err.message}`, 'err'); }
+      if (broker === 'fidelity' && fills.length) {
+        if (fills._skippedNonTrade) appendLog(logEl, `ℹ️ Skipped ${fills._skippedNonTrade} non-trade rows (dividends, transfers, cash sweeps)`, '');
+        if (fills._syntheticTimes) appendLog(logEl, `⚠️ Fidelity account history has no execution times — fills are sequenced from 12:00 ET in file order. Durations and the "P&L by Hour" chart are not meaningful for these trades.`, 'warn');
+      }
       if (fills.length) {
         const before = allTrades.length;
         // Deduplicate by composite key
@@ -630,7 +661,15 @@ function appendLog(el, msg, cls = '') {
 //  BROKER DETECTION
 // ═══════════════════════════════════════════════════════
 function detectBroker(text) {
-  const top = text.slice(0, 3000).toLowerCase();
+  const top = text.replace(/^﻿/, '').slice(0, 3000).toLowerCase();
+  // Fidelity Portfolio Positions — a holdings snapshot with no transactions in it.
+  // Caught before the trade formats so we can explain what to download instead.
+  if ((top.includes('cost basis total') || top.includes('percent of account')) &&
+      top.includes('last price')) return 'fidelity_positions';
+  // Fidelity: "Run Date,Action,Symbol…" header, or YOU BOUGHT/YOU SOLD action text.
+  // Checked first — these markers don't collide with the TOS/IBKR checks below.
+  if (top.includes('run date') || top.includes('you bought') || top.includes('you sold') ||
+      (top.includes('fidelity') && top.includes('symbol'))) return 'fidelity';
   // TOS Account Statement: has DATE,TIME,TYPE header and BOT/SOLD descriptions
   if (top.includes('date,time,type') || (top.includes(',trd,') && (top.includes('bot +') || top.includes('sold -')))) return 'tos_stmt';
   // TOS Account Trade History: has Exec Time / Pos Effect columns
@@ -1151,6 +1190,297 @@ function parseIBKR(text) {
       }
     }
   }
+  return fills;
+}
+
+// ═══════════════════════════════════════════════════════
+//  FIDELITY PARSER
+//
+//  Format A – Accounts → Activity & Orders → History → Download
+//    Run Date,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),
+//    Fees ($),Accrued Interest ($),Amount ($),Cash Balance ($),Settlement Date
+//    Newer variant drops the " ($)" suffixes and adds Exchange Quantity/Currency.
+//    Trades live in the free-text Action column:
+//      "YOU BOUGHT OPENING TRANSACTION CALL (SPY) SPDR S&P 500 ETF TR NOV 15 24 $585 (100 SHS)"
+//    ⚠ This export has NO execution time — see the sequencing note below.
+//
+//  Format B – Active Trader Pro order/execution export
+//    Has a Time column, so real timestamps are used when present.
+// ═══════════════════════════════════════════════════════
+
+// Fidelity trade actions always START with one of these. Anchoring on the prefix
+// (rather than scanning the whole string for words like "DISTRIBUTION") matters,
+// because the Action text embeds the full company name — a stock such as
+// DISTRIBUTION SOLUTIONS GROUP or SPLIT ROCK HOLDINGS would otherwise be dropped.
+// Everything else (JOURNALED, REINVESTMENT, DIVIDEND RECEIVED, …) is a cash movement.
+const FIDELITY_BUY  = /^\s*(YOU BOUGHT|BOUGHT|BUY)\b/i;
+const FIDELITY_SELL = /^\s*(YOU SOLD|SOLD|SELL)\b/i;
+const FIDELITY_EXPIRED = /^\s*EXPIRED\b/i;
+// Core/sweep money-market positions — "YOU BOUGHT" rows for these are cash parking, not trades.
+const FIDELITY_MMF = /^(SPAXX|FDRXX|FZFXX|FZDXX|SPRXX|FCASH|FDIC|FGXXX|FNSXX|QACDS)\**$/i;
+
+const FIDELITY_MONTHS = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 };
+const FID_MON = 'JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC';
+// Fidelity writes option descriptions two ways. Both are anchored on a real month
+// name so ticker/company words can't be mistaken for the expiration.
+//   Form 1 – "DKS JAN 15 2027 $160 CALL"                        (ticker first, type last)
+//   Form 2 – "CALL (SPY) SPDR S&P 500 ETF TR NOV 15 24 $585 …"  (type first, ticker in parens)
+const FIDELITY_OPT_DESC_1 = new RegExp(`\\b([A-Z][A-Z.\\/]{0,5})\\s+(${FID_MON})\\s+(\\d{1,2})\\s+(\\d{2,4})\\s+\\$?([\\d,]+(?:\\.\\d+)?)\\s+(CALL|PUT)\\b`, 'i');
+const FIDELITY_OPT_DESC_2 = new RegExp(`\\b(CALL|PUT)\\s*\\(([A-Z][A-Z.\\/]{0,5})\\)\\s+.*?\\b(${FID_MON})\\s+(\\d{1,2})\\s+(\\d{2,4})\\s+\\$?([\\d,]+(?:\\.\\d+)?)`, 'i');
+
+// Pull { underlying, expDate, strike, optType } out of either description form.
+function parseFidelityOptionDesc(s) {
+  if (!s) return null;
+  let und, mon, day, yr, strike, cp;
+  const m1 = s.match(FIDELITY_OPT_DESC_1);
+  if (m1) { [, und, mon, day, yr, strike, cp] = m1; }
+  else {
+    const m2 = s.match(FIDELITY_OPT_DESC_2);
+    if (!m2) return null;
+    [, cp, und, mon, day, yr, strike] = m2;
+  }
+  const y = parseInt(yr, 10);
+  const d = new Date(Date.UTC(y < 100 ? 2000 + y : y, FIDELITY_MONTHS[mon.toUpperCase()], parseInt(day, 10)));
+  if (isNaN(d.getTime())) return null;
+  return {
+    underlying: und.toUpperCase(),
+    expDate: d.toISOString().slice(0, 10),
+    strike: parseFloat(strike.replace(/,/g, '')),
+    optType: cp.toUpperCase(),
+  };
+}
+
+// Fidelity option symbols look like "-SPY241115C585" (short strike, leading dash),
+// but full 8-digit OCC strikes also show up. Distinguish by length.
+function parseFidelityOptionSymbol(sym) {
+  const s = (sym || '').trim().replace(/\s+/g, '').replace(/^[-.]/, '');
+  const m = s.match(/^([A-Z]{1,6})(\d{6})([CP])(\d+(?:\.\d+)?)$/i);
+  if (!m) return null;
+  const [, und, yymmdd, cp, stk] = m;
+  const expDate = `20${yymmdd.slice(0,2)}-${yymmdd.slice(2,4)}-${yymmdd.slice(4,6)}`;
+  // 8 all-digit chars = padded OCC strike in thousandths (00585000 → 585)
+  const strike = /^\d{8}$/.test(stk) ? parseInt(stk, 10) / 1000 : parseFloat(stk);
+  return { underlying: und.toUpperCase(), expDate, strike, optType: cp.toUpperCase() === 'C' ? 'CALL' : 'PUT' };
+}
+
+function parseFidelity(text) {
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  let headers = null;
+  let skippedNonTrade = 0;
+  let hasTimeCol = false;
+
+  // Normalize "Price ($)" → "price", "Commission ($)" → "commission".
+  // Fidelity exports are UTF-8 with a BOM, which would otherwise ride along on the
+  // first header cell ("﻿run date") and stop the header from ever matching.
+  const normHeader = c => c.replace(/^﻿/, '').toLowerCase().replace(/\(\$\)/g, '').replace(/\s+/g, ' ').trim();
+  // Like cleanNum, but distinguishes "no number here" (Fidelity prints
+  // "Processing" in Cash Balance for unsettled rows) from a genuine zero.
+  const numOrNull = s => {
+    if (s === undefined || s === null || String(s).trim() === '') return null;
+    const v = parseFloat(String(s).replace(/[$,\s]/g, ''));
+    return isNaN(v) ? null : v;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cells = parseCSVLine(line);
+
+    // ── Locate the header row ──
+    if (!headers) {
+      const lower = cells.map(normHeader);
+      const hasDate = lower.some(c => c === 'run date' || c === 'date' || c === 'trade date' || c === 'settlement date');
+      const hasAction = lower.some(c => c === 'action' || c === 'side' || c === 'transaction type');
+      const hasQty = lower.some(c => c === 'quantity' || c === 'qty' || c === 'filled qty' || c === 'shares');
+      if (hasDate && (hasAction || hasQty)) {
+        headers = lower;
+        hasTimeCol = headers.some(c => c === 'time' || c === 'execution time' || c === 'time executed');
+      }
+      continue;
+    }
+
+    // ── Data rows ──
+    const get = k => {
+      const idx = headers.indexOf(k);
+      return idx >= 0 ? (cells[idx] || '').trim() : '';
+    };
+    const getAny = (...ks) => { for (const k of ks) { const v = get(k); if (v) return v; } return ''; };
+
+    const dateRaw = getAny('run date', 'trade date', 'date');
+    if (!dateRaw) continue;                       // disclaimer/footer text
+    if (!/\d/.test(dateRaw)) continue;
+
+    const action = getAny('action', 'side', 'transaction type').toUpperCase();
+    const desc = get('description');
+    const symRaw = getAny('symbol', 'security', 'financial instrument').trim();
+    const qtyRaw = cleanNum(getAny('quantity', 'qty', 'filled qty', 'shares'));
+    const priceRaw = cleanNum(getAny('price', 'avg price', 'average price', 'price executed'));
+
+    if (!qtyRaw) continue;
+
+    // ── Side: from the Action prefix, falling back to the quantity sign ──
+    let side = null;
+    let isExpiration = false;
+    if (FIDELITY_EXPIRED.test(action)) { isExpiration = true; side = qtyRaw < 0 ? 'SELL' : 'BUY'; }
+    else if (FIDELITY_BUY.test(action)) side = 'BUY';
+    else if (FIDELITY_SELL.test(action)) side = 'SELL';
+    else if (!action && qtyRaw) side = qtyRaw > 0 ? 'BUY' : 'SELL';
+
+    if (!side) { skippedNonTrade++; continue; }
+    // A "YOU BOUGHT" of the core position is cash parking, not a trade.
+    if (FIDELITY_MMF.test(symRaw.replace(/^-/, ''))) { skippedNonTrade++; continue; }
+    // Expirations legitimately have an empty Price; everything else needs one.
+    if (!isExpiration && !priceRaw) { skippedNonTrade++; continue; }
+
+    // ── Instrument: symbol first (exact), then the description text ──
+    let optInfo = parseFidelityOptionSymbol(symRaw) ||
+                  parseFidelityOptionDesc(desc) ||
+                  parseFidelityOptionDesc(action);
+
+    const isOption = !!(optInfo && optInfo.expDate);
+    const underlying = (isOption ? optInfo.underlying : symRaw.replace(/^-/, '').split(' ')[0]).toUpperCase();
+    if (!underlying) { skippedNonTrade++; continue; }
+
+    // ── Cost basis ──
+    // Prefer what Fidelity actually moved in cash: Amount is net of every cost,
+    // including ones it doesn't itemise (an unlisted regulatory fee, or a fill
+    // price rounded for display). Where the Commission/Fees columns are populated
+    // this derivation reproduces them exactly, and where they aren't it still
+    // matches the broker's booked P&L to the cent.
+    const listedFees = Math.abs(cleanNum(getAny('commission', 'commissions'))) +
+                       Math.abs(cleanNum(getAny('fees', 'fee', 'reg fees')));
+    const amount = numOrNull(getAny('amount', 'net amount', 'proceeds'));
+    const qtyAbs = Math.abs(qtyRaw);
+    const price = isExpiration ? 0 : Math.abs(priceRaw);
+    const notional = qtyAbs * price * (isOption ? MULTIPLIER : 1);
+    let commission = listedFees;
+    if (amount !== null && notional > 0) {
+      const implied = side === 'BUY' ? Math.abs(amount) - notional : notional - Math.abs(amount);
+      // Sanity-guard against a misread row: costs are positive and small.
+      if (implied >= -0.005 && implied < notional * 0.05) commission = Math.max(0, implied);
+    }
+
+    // An expiration is booked a few days after it happens: "EXPIRED CALL (MU) …
+    // as of 2026-08-28" with a Run Date of 08/31. Date it to the real event.
+    const asOf = isExpiration && (action.match(/\bAS OF\s+(\d{4}-\d{2}-\d{2})/i) || [])[1];
+
+    rows.push({
+      dateRaw: asOf || dateRaw,
+      timeRaw: hasTimeCol ? getAny('time', 'execution time', 'time executed') : '',
+      // Running cash balance — the ordering signal used below. Kept as null when
+      // Fidelity prints "Processing" for an unsettled row.
+      cashBal: numOrNull(getAny('cash balance', 'balance')),
+      broker: 'fidelity',
+      symbol: isOption ? `${underlying} ${optInfo.expDate} ${optInfo.strike} ${optInfo.optType}` : underlying,
+      underlying,
+      expDate: isOption ? optInfo.expDate : null,
+      strike: isOption ? optInfo.strike : null,
+      optType: isOption ? optInfo.optType : null,
+      isOption,
+      side,
+      qty: qtyAbs,
+      price,
+      commission,
+      netAmount: amount === null ? 0 : amount,
+      spread: '',
+    });
+  }
+
+  if (!headers) {
+    throw new Error(
+      `Could not find a Fidelity transaction header row in this file.\n` +
+      `Export from Accounts → Activity & Orders → History → Download, ` +
+      `and drop in the .csv without editing it.`
+    );
+  }
+  if (!rows.length) {
+    throw new Error(
+      `No trades found in this file (${skippedNonTrade} non-trade rows such as dividends, ` +
+      `transfers and cash sweeps were skipped).\n` +
+      `Check that the date range covers the days you traded.`
+    );
+  }
+
+  // ── Timestamps ──
+  // Format A has no execution time, only a Run Date, and lists rows newest-first.
+  // Flip to chronological order, then sequence same-day fills one second apart from
+  // 12:00 ET so entry/exit order (and therefore trade grouping) is preserved.
+  // Real times are used whenever the export actually has a Time column.
+  const parsedDate = r => {
+    const m = r.dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m) {
+      const yr = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
+      return `${yr}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+    }
+    const d = new Date(r.dateRaw);                       // "Nov-15-2024", "2024-11-15"
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  };
+
+  const dated = rows.map(r => ({ ...r, isoDate: parsedDate(r) })).filter(r => r.isoDate);
+  if (!dated.length) throw new Error(`Could not read any dates from this file — unexpected Run Date format.`);
+
+  // Fidelity's history download lists newest-first. When we have to synthesize
+  // times, flip to chronological so buys precede the sells that close them.
+  // Exports with a real Time column are left alone — their timestamps are
+  // authoritative. Evidence, best first:
+  //   1. The running Cash Balance column. balance[older] + amount[newer] ==
+  //      balance[newer] holds only in the true direction, so this is exact and
+  //      it works even within a single day.
+  //   2. Run Date gradient, if the file spans more than one day.
+  //   3. Fidelity's documented newest-first default.
+  // Note: do NOT infer direction from OPENING/CLOSING TRANSACTION labels. A close
+  // legitimately precedes an open when a position is exited and re-entered the
+  // same day, which happens often in this data.
+  if (!hasTimeCol && dated.length > 1) {
+    let desc = 0, asc = 0;
+    for (let i = 0; i + 1 < dated.length; i++) {
+      const a = dated[i], b = dated[i + 1];
+      if (a.cashBal === null || b.cashBal === null) continue;
+      if (a.netAmount && Math.abs(b.cashBal + a.netAmount - a.cashBal) < 0.005) desc++;
+      else if (b.netAmount && Math.abs(a.cashBal + b.netAmount - b.cashBal) < 0.005) asc++;
+    }
+    let descending;
+    if (desc || asc) descending = desc >= asc;
+    else {
+      const firstDate = dated[0].isoDate, lastDate = dated[dated.length - 1].isoDate;
+      descending = firstDate >= lastDate;
+    }
+    if (descending) dated.reverse();
+  }
+
+  // "09:41:12", "9:41 AM", "10:15:47 ET" → "HH:MM:SS" (Eastern, 24h)
+  const parseClock = t => {
+    const m = (t || '').replace(/\s*(ET|EST|EDT)\s*$/i, '').trim()
+                       .match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+    if (!m) return null;
+    let hh = parseInt(m[1], 10);
+    const ap = (m[4] || '').toUpperCase();
+    if (ap === 'PM' && hh < 12) hh += 12;
+    if (ap === 'AM' && hh === 12) hh = 0;
+    if (hh > 23) return null;
+    return `${String(hh).padStart(2,'0')}:${m[2]}:${m[3] || '00'}`;
+  };
+
+  const seqByDate = {};
+  const fills = [];
+  dated.forEach(r => {
+    let ts = null;
+    // Build from the normalized ISO date + explicit ET offset — never hand a
+    // M/D/YYYY string to Date(), which would read it as browser-local time.
+    const clock = parseClock(r.timeRaw);
+    if (clock) ts = new Date(`${r.isoDate}T${clock}${getETOffset(r.isoDate)}`).getTime();
+    if (!ts || isNaN(ts)) {
+      const seq = (seqByDate[r.isoDate] = (seqByDate[r.isoDate] || 0) + 1);
+      ts = new Date(`${r.isoDate}T12:00:00${getETOffset(r.isoDate)}`).getTime() + (seq - 1) * 1000;
+    }
+    if (isNaN(ts)) return;
+    const { dateRaw, timeRaw, isoDate, cashBal, ...fill } = r;
+    fills.push({ ...fill, timestamp: ts, date: fmtDateET(ts) });
+  });
+
+  fills._skippedNonTrade = skippedNonTrade;
+  fills._syntheticTimes = !hasTimeCol;
   return fills;
 }
 
