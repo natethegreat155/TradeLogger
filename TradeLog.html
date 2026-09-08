@@ -2968,6 +2968,13 @@ async function callLLM(messages, opts = {}) {
       body: JSON.stringify(payload)
     });
   } catch (err) {
+    if (/ISO-8859-1|code point/i.test(err.message)) {
+      throw new Error(
+        `The API key contains a character that isn't valid in an HTTP header ` +
+        `(often a curly quote or invisible character from copy-paste). Re-copy ` +
+        `the key from the provider and re-enter it. (${err.message})`
+      );
+    }
     // fetch only rejects on network/CORS failures — an HTTP error still resolves.
     let host = cfg.url;
     try { host = new URL(cfg.url).host; } catch (e) {}
